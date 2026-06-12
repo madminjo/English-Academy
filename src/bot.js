@@ -28,6 +28,18 @@ require("./actions/today")(bot);
 // 3. Крон-планировщик рассылок
 require("./cron/dailyLesson")(bot);
 
+const express = require("express");
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// 🔥 ВАЖНО: Добавили парсер для обработки входящих JSON-пакетов от Telegram
+app.use(express.json());
+
+// Создаем простейший роут для проверки живой ли бот
+app.get("/", (req, res) => {
+  res.send("🤖 Michael's Academy is alive and running 24/7!");
+});
+
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
   const LIMIT = 4000;
@@ -150,17 +162,43 @@ bot.on("text", async (ctx) => {
   }
 });
 
-// Запуск бота
+// 🔥 УМНЫЙ ЗАПУСК: Объединяем Express и Telegram-сервер
 function startBot() {
-  console.log("⏳ Подключение к Telegram API...");
-  bot.launch()
-    .then(() => console.log("🚀 [English Master Bot] успешно запущен и структурирован!"))
-    .catch((err) => {
-      console.error("❌ Ошибка запуска бота:", err.message);
-      setTimeout(startBot, 10000);
+  const RENDER_URL = process.env.RENDER_EXTERNAL_URL; // Render сам подставит твой URL на сервере
+
+  if (RENDER_URL) {
+    // 🌐 На сервере Render: работаем через стабильные Webhooks
+    const secretPath = `/telegraf/${bot.secretPathComponent()}`;
+    
+    app.use(bot.webhookCallback(secretPath));
+    
+    app.listen(PORT, async () => {
+      console.log(`✅ Веб-сервер запущен на Render. Слушаем порт: ${PORT}`);
+      try {
+        await bot.telegram.setWebhook(`${RENDER_URL}${secretPath}`);
+        console.log(`🚀 [English Master Bot] успешно запущен через WEBHOOK!`);
+      } catch (err) {
+        console.error("❌ Ошибка установки вебхука Telegram:", err.message);
+      }
     });
+
+  } else {
+    // 💻 На твоем компьютере: автоматически запускается обычный Long Polling для тестов
+    app.listen(PORT, () => {
+      console.log(`✅ Локальный веб-сервер запущен на порту: ${PORT}`);
+    });
+
+    console.log("⏳ Подключение к Telegram API (Локально)...");
+    bot.launch()
+      .then(() => console.log("🚀 [English Master Bot] успешно запущен локально!"))
+      .catch((err) => {
+        console.error("❌ Ошибка запуска бота:", err.message);
+        setTimeout(startBot, 10000);
+      });
+  }
 }
 
+// Запускаем единую точку входа
 startBot();
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
