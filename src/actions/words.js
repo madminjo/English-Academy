@@ -68,7 +68,7 @@ module.exports = (bot) => {
       } else {
         // Если в кэше БД пусто — делаем запрос к Gemini ИИ
         const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash", 
+          model: "gemini-2.0-flash", 
           contents: getPromptText(currentTopic),
           config: {
             systemInstruction: SYSTEM_INSTRUCTION
