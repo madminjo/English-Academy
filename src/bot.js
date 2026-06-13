@@ -82,8 +82,9 @@ bot.on("text", async (ctx) => {
 
   const waitingMsg = await ctx.reply("🔄 ИИ-Учитель внимательно читает твой текст и сверяет с темой урока... Секундочку...");
 
-  try {
-    const prompt = `
+
+try {
+      const prompt = `
 Ты — харизматичный американский преподаватель английского языка по имени Майкл с 40-летним опытом. 
 Ты виртуозно владеешь русским языком и используешь его, чтобы объяснять русскоязычным студентам сложнейшие правила английского так просто, живо и весело, будто твоему ученику 10 лет. 
 
@@ -130,6 +131,7 @@ bot.on("text", async (ctx) => {
 - Категорически ЗАПРЕЩЕНО использовать Markdown.
 `;
 
+
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash", 
       contents: prompt,
@@ -154,9 +156,26 @@ bot.on("text", async (ctx) => {
     await sendLongMessage(ctx, fullHeaderText, keyboard);
 
   } catch (error) {
-    console.error("❌ Ошибка при проверке задания через Gemini:", error);
+    // Выводим краткую ошибку в консоль, чтобы не засорять логи длинными JSON
+    console.error("❌ Ошибка при проверке задания через Gemini:", error.message || error);
     await ctx.telegram.deleteMessage(ctx.chat.id, waitingMsg.message_id).catch(() => {});
-    await ctx.reply("⚠️ Сервер ИИ временно задумался. Попробуй позже.", 
+
+    // 🔥 УМНАЯ ОБРАБОТКА ЛИМИТОВ (429)
+    if (error.status === 429 || (error.message && error.message.includes("429"))) {
+      return await ctx.replyWithHTML(
+        `⚠️ <b>Слишком много домашек!</b>\n\n` +
+        `Бро, ИИ-учитель проверяет задания со скоростью света, но Google временно приостановил нас из-за лимита запросов.\n\n` +
+        `⏳ <i>Подожди минутку и нажми кнопку ниже, чтобы отправить текст заново.</i>`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback("📝 Сдать домашку", "action_task")],
+          [Markup.button.callback("⬅️ В меню", "action_main_menu")]
+        ])
+      );
+    }
+
+    // Для всех остальных непредвиденных ошибок
+    await ctx.reply(
+      "⚠️ Сервер ИИ временно задумался или произошла непредвиденная ошибка. Попробуй немного позже.", 
       Markup.inlineKeyboard([[Markup.button.callback("⬅️ В меню", "action_main_menu")]])
     );
   }
