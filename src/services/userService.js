@@ -54,6 +54,24 @@ async function setSubscription(id, status) {
   );
 }
 
+async function revokeSubscription(id) {
+  await db.query(
+    "UPDATE users SET status = 'free', sub_end_date = NULL WHERE telegram_id = $1",
+    [id]
+  );
+}
+
+// 2. Принудительная выдача подписки (на произвольный срок или навсегда)
+async function grantSubscription(id, status, days = 30) {
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + days);
+  
+  await db.query(
+    "UPDATE users SET status = $1, sub_end_date = $2 WHERE telegram_id = $3",
+    [status, endDate, id]
+  );
+}
+
 // 7. 🔥 Проверка статуса (автоматически скидывает в 'free', если время вышло)
 async function isSubActive(id) {
   // Атомарный запрос: проверяем и обновляем одним махом
@@ -138,6 +156,8 @@ module.exports = {
   updateUserDay,
   updateWordsCount,
   setSubscription,
+  revokeSubscription, 
+  grantSubscription,  
   isSubActive,
   canRequest,  
   incrementRequests,

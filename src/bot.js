@@ -16,7 +16,8 @@ bot.use(session());
 
 // 🔥 ЗАЩИТА: Весь входящий трафик (кнопки, сообщения, команды) идет через этот фильтр
 bot.use(subscriptionGuard);
-const { getAllUsers, setUserStatus, canRequest, incrementRequests, getUser, setSubscription } = require('./services/userService');
+const { getAllUsers, revokeSubscription, canRequest, incrementRequests, getUser, setSubscription } = require('./services/userService');
+
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot);
@@ -125,9 +126,9 @@ bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async (ctx) => {
 // Обработка отключения
 bot.action(/^adm_off_(\d+)$/, async (ctx) => {
   const userId = ctx.match[1];
-  await setUserStatus(userId, 'free', 0); 
+  await revokeSubscription(userId); // Используем новую, рабочую функцию
   await ctx.answerCbQuery('Подписка отключена!');
-  // Обновляем сообщение
+  
   await ctx.editMessageText(`Пользователь <b>${userId}</b> теперь имеет статус <b>Free</b>.`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
@@ -303,6 +304,11 @@ bot.action(/set_lang_(en|de)/, async (ctx) => {
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ В профиль', 'action_profile')]])
   }).catch(err => console.error("Ошибка при обновлении сообщения:", err));
 });
+
+
+// ... после успешной отправки запроса в ИИ:
+const remaining = await incrementRequests(ctx.from.id);
+console.log(`Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`);
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
