@@ -8,25 +8,22 @@ module.exports = (bot) => {
     const page = ctx.match && ctx.match[2] ? parseInt(ctx.match[2]) : 1;
     const wordsPerPage = 20;
 
-    // ЗАГРУЖАЕМ ИЗ БД (это правильно)
     const allWords = await wordService.getUserVocabulary(ctx.from.id);
 
     if (!allWords || allWords.length === 0) {
-      const emptyText = `🗂 <b>ТВОЙ ЛИЧНЫЙ СЛОВАРЬ</b>\n───────────────────────\n\n` +
-                        `😔 Здесь пока пусто, бро. Ты еще не сохранил ни одного слова.\n\n` +
-                        `🎯 Зайди в раздел <b>«📚 Слова дня»</b> и нажми «Сохранить»!`;
-      
-      return ctx.editMessageText(emptyText, {
-        parse_mode: "HTML",
-        reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]]).reply_markup
-      }).catch(() => {});
+      return ctx.editMessageText(
+        `🗂 <b>ТВОЙ ЛИЧНЫЙ СЛОВАРЬ</b>\n───────────────────────\n\n😔 Здесь пока пусто, бро. Ты еще не сохранил ни одного слова.\n\n🎯 Зайди в раздел <b>«📚 Слова дня»</b> и нажми «Сохранить»!`,
+        {
+          parse_mode: "HTML",
+          reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]]).reply_markup
+        }
+      ).catch(() => {});
     }
 
     const totalPages = Math.ceil(allWords.length / wordsPerPage);
     const startIndex = (page - 1) * wordsPerPage;
     const pageWords = allWords.slice(startIndex, startIndex + wordsPerPage);
 
-    // Форматируем вывод (предполагаем, что в БД объект {word, translation})
     const formattedList = pageWords.map((item, i) => 
       `${startIndex + i + 1}. ${item.word} — ${item.translation || ''}`
     ).join("\n");
@@ -46,8 +43,41 @@ module.exports = (bot) => {
       parse_mode: "HTML",
       reply_markup: Markup.inlineKeyboard([
         navigationButtons,
+        [Markup.button.callback("🗑 Очистить словарь", "action_clear_vocabulary")],
         [Markup.button.callback("⬅️ Главное меню", "action_main_menu")]
       ]).reply_markup
     }).catch((err) => console.log("Ошибка пагинации:", err.message));
+  });
+
+  bot.action("action_clear_vocabulary", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.editMessageText(
+      "🗑 <b>Очистка словаря</b>\n───────────────────────\n\n⚠️ Ты уверен? Все сохранённые слова будут удалены безвозвратно!",
+      {
+        parse_mode: "HTML",
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("✅ Да, удалить всё", "action_clear_vocabulary_confirm")],
+          [Markup.button.callback("❌ Отмена", "action_my_vocabulary")]
+        ]).reply_markup
+      }
+    ).catch(() => {});
+  });
+
+  bot.action("action_clear_vocabulary_confirm", async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    try {
+      await wordService.clearUserVocabulary(ctx.from.id);
+      await ctx.editMessageText(
+        "✅ <b>Словарь очищен!</b>\n\nВсе слова удалены. Можешь начать заново!",
+        {
+          parse_mode: "HTML",
+          reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback("⬅️ Главное меню", "action_main_menu")]
+          ]).reply_markup
+        }
+      ).catch(() => {});
+    } catch (err) {
+      await ctx.reply("⚠️ Ошибка при очистке словаря").catch(() => {});
+    }
   });
 };
