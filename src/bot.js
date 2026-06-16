@@ -20,7 +20,7 @@ const { getAllUsers, setUserStatus, canRequest, incrementRequests, getUser, setS
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot);
-require('./commands/profile')(bot);
+// require('./commands/profile')(bot);
 
 require('./actions/mainMenu')(bot);
 require('./actions/words')(bot);
@@ -223,16 +223,18 @@ bot.on('text', async ctx => {
 
 // Обработчик нажатия на кнопку "👤 Профиль" в меню
 bot.action('action_profile', async (ctx) => {
-  // 1. Убираем "часики" (Loading)
+  // 1. Обязательно ответьте на запрос кнопки, чтобы убрать "Loading..."
   await ctx.answerCbQuery().catch(() => {});
   
-  // 2. Вызываем логику профиля (которую мы поправили)
+  // 2. Получите данные пользователя
   const { getUser } = require('./services/userService');
   const user = await getUser(ctx.from.id);
   
-  if (!user) return ctx.reply("Сначала нажми /start!");
+  if (!user) {
+    return ctx.reply("Сначала нажми /start!");
+  }
 
-  // 3. Формируем текст (используем исправленное условие статуса)
+  // 3. Формирование текста (с учетом исправленного отображения статуса)
   const statusDisplay = user.status === 'free' 
     ? '🆓 Free' 
     : `💎 Premium (${user.status.toUpperCase()})`;
@@ -249,13 +251,19 @@ bot.action('action_profile', async (ctx) => {
 🧠 <b>Выучено слов:</b> ${user.words_learned}
 `;
 
-  // 4. Отправляем ответ
+  // 4. Обновите сообщение
   await ctx.editMessageText(profileText, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
     ])
   });
+});
+
+// Обработчик кнопки "⚙️ Настройки времени" из главного меню
+bot.action('action_settings', async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {}); // Убираем "Loading..."
+  await sendTimezoneMenu(ctx, true); // Используем твою готовую функцию
 });
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
