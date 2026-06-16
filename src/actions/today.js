@@ -119,10 +119,13 @@ module.exports = (bot) => {
           console.error('❌ Не удалось сохранить урок в базу:', saveErr.message);
         }
 
-      } catch (error) {
-        console.error('❌ Тотальный сбой генерации урока через Gemini:', error.message);
+} catch (error) {
+        console.error('❌ Тотальный сбой генерации урока через Gemini:', error);
+        // Выводим ошибку прямо в чат, чтобы сразу увидеть её причину
         return ctx.replyWithHTML(
-          '⚠️ Йоу, бро, что-то сервер Майкла прилёг из-за наплыва студентов. Давай попробуем открыть учебник ещё раз через минутку!',
+          '⚠️ <b>Бро, пойман баг!</b>\n\n' +
+          'Текст ошибки: <code>' + error.message + '</code>\n\n' +
+          'Посмотри консоль Render для полной инфы.',
           Markup.inlineKeyboard([[Markup.button.callback('⬅️ Вернуться в меню', 'action_main_menu')]])
         ).catch(() => {});
       }
