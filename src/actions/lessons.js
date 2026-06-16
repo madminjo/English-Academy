@@ -91,13 +91,17 @@ const prompt = `
       let aiExplanation = response.text;
 
       // 🔥 ПРОГРАММНЫЙ ФИЛЬТР-ПРЕДОХРАНИТЕЛЬ:
+// Удаляем вложенные теги, которые вызывают конфликт
       aiExplanation = aiExplanation
-        .replace(/^```html?\s*/i, '') 
-        .replace(/```\s*$/, '')       
+        .replace(/<code>([\s\S]*?)<\/code>/gi, (match, content) => {
+            // Удаляем любые HTML теги внутри блока code, чтобы они не ломали верстку
+            const cleanContent = content.replace(/<[^>]*>/g, '');
+            return `<code>${cleanContent}</code>`;
+        })
         .replace(/<\/?ul>/gi, '')     
         .replace(/<\/?ol>/gi, '')     
         .replace(/<li>/gi, '• ')       
-        .replace(/<\/li>/gi, '\n');    
+        .replace(/<\/li>/gi, '\n');
 
       // 3. Формируем финальное стильное сообщение
       const finalExplanationText = 
