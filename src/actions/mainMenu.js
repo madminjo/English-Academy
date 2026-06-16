@@ -23,19 +23,19 @@ module.exports = (bot) => {
           Markup.button.callback("📖 Урок дня", "action_today"),
           Markup.button.callback("📚 Слова дня", "action_words")
         ],
-        // Второй ряд: Личный архив слов и сдача ДЗ
+        // Второй ряд: Личный архив слов и ДЗ
         [
-          Markup.button.callback("🗂 Мой словарь", "action_my_vocabulary"), // 🔥 НАША НОВАЯ КНОПКА
+          Markup.button.callback("🗂 Мой словарь", "action_my_vocabulary"),
           Markup.button.callback("📝 Сдать домашку", "action_task")
         ],
-        // Третий ряд: Прогресс и трекинг
+        // Третий ряд: Профиль и Уровень
         [
-          Markup.button.callback("🏆 Прогресс & Стрики", "action_profile"),
-          Markup.button.callback("🎯 Выбор уровня", "action_lessons")
+          Markup.button.callback("👤 Профиль", "action_profile"),
+          Markup.button.callback("🎯 Уровни", "action_lessons")
         ],
         // Четвертый ряд: Настройки
         [
-          Markup.button.callback("🔔 Напоминания", "action_reminders")
+          Markup.button.callback("⚙️ Настройки времени", "action_settings")
         ]
       ]).reply_markup
     }).catch((err) => console.log("Текст не изменился, игнорируем"));
