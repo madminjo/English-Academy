@@ -1,67 +1,71 @@
 // Подключаем твой настроенный пул
-const pool = require("../config/db"); // ✅ Правильный путь
+const pool = require("../config/db"); // ✅ Путь верный
 
 const wordService = {
-  // Ищем тему в глобальном кэше (чтобы экономить лимиты ИИ и выдавать мгновенно)
+  // 1. Ищем тему в глобальном кэше уроков (используем твою таблицу lessons или аналогичный кэш)
   getWordsByTopic: async (topicName) => {
     try {
+      // Ищем закэшированный текст урока по названию темы в колонке grammar или читай из кэш-таблицы, если она есть
+      // Если у тебя для кэша создана отдельная таблица, например topic_words_cache, оставь её, но убедись, что она создана в Neon
       const res = await pool.query(
-        "SELECT raw_text FROM topic_words_cache WHERE topic_name = $1", 
+        "SELECT grammar FROM lessons WHERE reading = $1 LIMIT 1", 
         [topicName]
       );
-      return res.rows[0] ? res.rows[0].raw_text : null;
+      return res.rows[0] ? res.rows[0].grammar : null;
     } catch (err) {
       console.error("❌ Ошибка при поиске кэша темы в БД:", err.message);
       return null; // В случае ошибки БД даем боту сгенерировать через ИИ
     }
   },
 
-  // Сохраняем сгенерированный пак от Gemini в общий кэш
+  // 2. Сохраняем сгенерированный пак от Gemini в общий кэш уроков
   saveWordsToCache: async (topicName, rawText) => {
     try {
       await pool.query(
-        "INSERT INTO topic_words_cache (topic_name, raw_text) VALUES ($1, $2) ON CONFLICT (topic_name) DO NOTHING",
-        [topicName, rawText]
+        "INSERT INTO lessons (grammar, reading) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+        [rawText, topicName]
       );
     } catch (err) {
       console.error("❌ Ошибка записи темы в кэш БД:", err.message);
     }
   },
 
-  // Массовое сохранение слов в личный профиль студента через транзакцию
+  // 3. Массовое сохранение слов в личный профиль студента через транзакцию (СТРУКТУРИРОВАННО)
   saveUserVocabulary: async (userId, wordsArray) => {
-    const client = await pool.connect(); // Берем один коннект из твоего пула max: 10
+    const client = await pool.connect(); // Берем один коннект из пула
     try {
       await client.query("BEGIN"); // Стартуем транзакцию для безопасности данных
       
+      // Делаем INSERT именно в твою таблицу vocabulary и созданные колонки
       const insertQuery = `
-        INSERT INTO user_vocabulary (user_id, word_line) 
-        VALUES ($1, $2) 
-        ON CONFLICT (user_id, word_line) DO NOTHING
+        INSERT INTO vocabulary (telegram_id, word, translation, transcription) 
+        VALUES ($1, $2, $3, $4)
       `;
 
-      for (const word of wordsArray) {
-        await client.query(insertQuery, [userId, word]);
+      for (const item of wordsArray) {
+        // Передаем userId и распарсенные экшеном поля объекта
+        await client.query(insertQuery, [userId, item.word, item.translation, item.transcription]);
       }
       
-      await client.query("COMMIT"); // Фиксируем изменения
+      await client.query("COMMIT"); // Фиксируем изменения в Neon
     } catch (err) {
-      await client.query("ROLLBACK"); // Если упало на каком-то слове — откатываем всё
+      await client.query("ROLLBACK"); // Если упало на каком-то слове — откатываем всё назад
       console.error("❌ Ошибка транзакции при сохранении слов юзера:", err.message);
       throw err;
     } finally {
-      client.release(); // Обязательно возвращаем коннект обратно в пул Neon!
+      client.release(); // Обязательно возвращаем коннект обратно в пул!
     }
   },
 
-  // Вытаскиваем весь личный словарь конкретного пользователя
+  // 4. Вытаскиваем весь личный словарь конкретного пользователя для отображения
   getUserVocabulary: async (userId) => {
     try {
       const res = await pool.query(
-        "SELECT word_line FROM user_vocabulary WHERE user_id = $1 ORDER BY id ASC",
+        "SELECT word, translation, transcription FROM vocabulary WHERE telegram_id = $1 ORDER BY id ASC",
         [userId]
       );
-      return res.rows.map(row => row.word_line);
+      // Возвращаем массив объектов со словами
+      return res.rows;
     } catch (err) {
       console.error("❌ Ошибка получения словаря пользователя из БД:", err.message);
       throw err;
