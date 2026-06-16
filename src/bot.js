@@ -85,11 +85,21 @@ bot.command('admin', async (ctx) => {
 
 bot.action(/^adm_manage_(\d+)$/, async (ctx) => {
   const userId = ctx.match[1];
+  // Получаем данные о юзере из БД
+  const user = await getUser(userId); 
   
-  await ctx.editMessageText(`Управление пользователем <b>${userId}</b>:`, {
+  const userInfo = `
+👑 <b>Управление профилем</b>
+👤 <b>Ник:</b> ${user.username || 'Нет'}
+🆔 <b>ID:</b> ${user.telegram_id}
+📊 <b>Статус:</b> ${user.status}
+📅 <b>Подписка до:</b> ${user.sub_end_date ? user.sub_end_date.toLocaleDateString() : '—'}
+`;
+
+  await ctx.editMessageText(userInfo, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('✅ Продлить Premium', `adm_prolong_${userId}`)],
+      [Markup.button.callback('✅ Продлить Premium', `adm_choose_term_${userId}`)],
       [Markup.button.callback('❌ Отключить подписку', `adm_off_${userId}`)],
       [Markup.button.callback('⬅️ Назад к списку', 'adm_back')]
     ])
@@ -97,12 +107,15 @@ bot.action(/^adm_manage_(\d+)$/, async (ctx) => {
 });
 
 // Обработка продления
-bot.action(/^adm_prolong_(\d+)$/, async (ctx) => {
+bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async (ctx) => {
   const userId = ctx.match[1];
-  await setUserStatus(userId, 'premium', 1); 
-  await ctx.answerCbQuery('Подписка продлена до Premium!');
-  // Обновляем сообщение, чтобы сразу видеть изменения статуса
-  await ctx.editMessageText(`Пользователь <b>${userId}</b> теперь имеет статус <b>Premium</b>!`, {
+  const term = ctx.match[2]; // mo1, mo3, mo6, mo12
+  
+  // Используем твою готовую функцию setSubscription из userService
+  await setSubscription(userId, term); 
+  
+  await ctx.answerCbQuery(`Успешно продлено на ${term}`);
+  await ctx.editMessageText(`✅ <b>Пользователь ${userId} успешно продлен!</b>`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
   });
@@ -119,6 +132,21 @@ bot.action(/^adm_off_(\d+)$/, async (ctx) => {
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
   });
 });
+
+bot.action(/^adm_choose_term_(\d+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  await ctx.editMessageText(`<b>Выберите срок продления для ${userId}:</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('1 Месяц', `adm_prolong_${userId}_mo1`)],
+      [Markup.button.callback('3 Месяца', `adm_prolong_${userId}_mo3`)],
+      [Markup.button.callback('6 Месяцев', `adm_prolong_${userId}_mo6`)],
+      [Markup.button.callback('12 Месяцев', `adm_prolong_${userId}_mo12`)],
+      [Markup.button.callback('⬅️ Отмена', `adm_manage_${userId}`)]
+    ])
+  });
+});
+
 bot.action('tz_group_moscow', async (ctx) => {
   await ctx.editMessageText('📍 <b>Выбери регион:</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([
       [Markup.button.callback('Москва (UTC+3)', 'set_tz_Europe/Moscow'), Markup.button.callback('Минск (UTC+3)', 'set_tz_Europe/Minsk')],

@@ -1,41 +1,30 @@
+const { getUser } = require('../services/userService');
 const { Markup } = require('telegraf');
-const { getUserById } = require('../services/userService');
 
 module.exports = (bot) => {
-  bot.action('action_profile', async (ctx) => {
-    await ctx.answerCbQuery().catch(() => {});
-    
-    const user = await getUserById(ctx.from.id);
-    if (!user) return ctx.reply("❌ Ошибка: пользователь не найден.");
+  bot.command('profile', async (ctx) => {
+    try {
+      const user = await getUser(ctx.from.id);
+      if (!user) return ctx.reply("Сначала нажми /start, чтобы зарегистрироваться!");
 
-    // Перевод статуса для красоты
-    const statusNames = {
-      'free': 'Стандарт (Free)',
-      'mo1': 'Месяц (Premium)',
-      'mo3': '3 месяца (Premium)',
-      'mo6': '6 месяцев (Premium)',
-      'mo12': 'Год (Premium)'
-    };
+      const profileText = `
+👤 <b>Твой профиль:</b>
+───────────────────────
+🆔 <b>ID:</b> ${user.telegram_id}
+📛 <b>Имя:</b> ${user.first_name || '—'}
+👑 <b>Статус:</b> ${user.status === 'premium' ? '💎 Premium' : '🆓 Free'}
+📅 <b>Подписка до:</b> ${user.sub_end_date ? new Date(user.sub_end_date).toLocaleDateString() : '—'}
+📈 <b>Уровень:</b> ${user.level}
+🔥 <b>Стрик:</b> ${user.streak} дней
+🧠 <b>Выучено слов:</b> ${user.words_learned}
+`;
 
-    const subText = user.status === 'free' 
-      ? "<i>Нет активной подписки</i>" 
-      : `✅ Активна до: <b>${user.sub_end_date ? new Date(user.sub_end_date).toLocaleDateString() : '—'}</b>`;
-
-    const profileText = 
-      `👤 <b>ЛИЧНЫЙ КАБИНЕТ СТУДЕНТА</b>\n` +
-      `───────────────────────\n` +
-      `🆔 <b>ID:</b> <code>${user.telegram_id}</code>\n` +
-      `🎓 <b>Имя:</b> ${user.first_name || 'Студент'}\n` +
-      `📅 <b>Текущий день:</b> ${user.current_day || 1}\n` +
-      `📚 <b>Выучено слов:</b> ${user.words_learned || 0}\n` +
-      `💎 <b>Статус:</b> ${statusNames[user.status] || 'Free'}\n` +
-      `🔔 <b>Подписка:</b> ${subText}\n` +
-      `───────────────────────`;
-
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('⬅️ В главное меню', 'action_main_menu')]
-    ]);
-
-    await ctx.editMessageText(profileText, { parse_mode: 'HTML', ...keyboard });
+      await ctx.replyWithHTML(profileText, Markup.inlineKeyboard([
+        [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
+      ]));
+    } catch (error) {
+      console.error("Ошибка в /profile:", error);
+      ctx.reply("⚠️ Не удалось загрузить профиль. Попробуй позже.");
+    }
   });
 };
