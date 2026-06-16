@@ -1,14 +1,13 @@
 require('dotenv').config()
 const { Telegraf, Markup, session } = require('telegraf')
-const { GoogleGenAI } = require('@google/genai')
 
 const bot = new Telegraf(process.env.BOT_TOKEN)
 
 // Включаем сессии
 bot.use(session())
 
-// Инициализируем Gemini API
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+// 🔥 УБРАЛИ ПРЯМОЙ ИМПОРТ @google/genai И ПОДКЛЮЧАЕМ НАШ СЕРВИС С РОТАЦИЕЙ КЛЮЧЕЙ
+const { generateContentWithRetry } = require('./services/aiService')
 
 // --- СВЯЗЫВАЕМ СТРУКТУРУ ПРОЕКТА (ПОДКЛЮЧАЕМ МОДУЛИ) ---
 
@@ -34,83 +33,83 @@ require('./cron/dailyLesson')(bot)
 // Функция генерации главного меню часовых поясов
 async function sendTimezoneMenu(ctx, isEdit = false) {
   const text = 
-    `🌍 <b>НАСТРОЙКА ВРЕМЕНИ АКАДЕМИИ</b>\n` +
-    `───────────────────────\n` +
-    `Бро, выбери свой регион или часовой пояс, чтобы уникальные уроки от Майкла приходили строго в <b>07:00 утра</b> по твоему местному времени!`
+    '🌍 <b>НАСТРОЙКА ВРЕМЕНИ АКАДЕМИИ</b>\n' +
+    '───────────────────────\n' +
+    'Бро, выбери свой регион или часовой пояс, чтобы уникальные уроки от Майкла приходили строго в <b>07:00 утра</b> по твоему местному времени!'
 
   const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback("🇰🇬 🇰🇿 🇺🇿 Средняя Азия (UTC+5 / UTC+6)", "tz_group_asia")],
-    [Markup.button.callback("🇷🇺 Москва и СНГ (UTC+3)", "tz_group_moscow")],
-    [Markup.button.callback("🇪🇺 Европа (UTC+1 / UTC+2)", "tz_group_europe")],
-    [Markup.button.callback("🌎 Другие пояса / США", "tz_group_other")]
+    [Markup.button.callback('🇰🇬 🇰🇿 🇺🇿 Средняя Азия (UTC+5 / UTC+6)', 'tz_group_asia')],
+    [Markup.button.callback('🇷🇺 Москва и СНГ (UTC+3)', 'tz_group_moscow')],
+    [Markup.button.callback('🇪🇺 Европа (UTC+1 / UTC+2)', 'tz_group_europe')],
+    [Markup.button.callback('🌎 Другие пояса / США', 'tz_group_other')]
   ])
 
   if (isEdit) {
-    return ctx.editMessageText(text, { parse_mode: "HTML", ...keyboard })
+    return ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboard })
   } else {
     return ctx.replyWithHTML(text, keyboard)
   }
 }
 
 // Вызывается ТОЛЬКО когда пользователь сам вводит /timezone
-bot.command("timezone", async (ctx) => {
+bot.command('timezone', async (ctx) => {
   await sendTimezoneMenu(ctx, false)
 })
 
 // Подменю 1: Азия
-bot.action("tz_group_asia", async (ctx) => {
-  await ctx.editMessageText("📍 <b>Выбери свой город:</b>", {
-    parse_mode: "HTML",
+bot.action('tz_group_asia', async (ctx) => {
+  await ctx.editMessageText('📍 <b>Выбери свой город:</b>', {
+    parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("Бишкек (UTC+6)", "set_tz_Asia/Bishkek")],
-      [Markup.button.callback("Алматы / Астана (UTC+5)", "set_tz_Asia/Almaty")],
-      [Markup.button.callback("Ташкент (UTC+5)", "set_tz_Asia/Tashkent")],
-      [Markup.button.callback("⬅️ Назад в меню", "tz_back")]
+      [Markup.button.callback('Бишкек (UTC+6)', 'set_tz_Asia/Bishkek')],
+      [Markup.button.callback('Алматы / Астана (UTC+5)', 'set_tz_Asia/Almaty')],
+      [Markup.button.callback('Ташкент (UTC+5)', 'set_tz_Asia/Tashkent')],
+      [Markup.button.callback('⬅️ Назад в меню', 'tz_back')]
     ])
   })
 })
 
 // Подменю 2: Москва и СНГ
-bot.action("tz_group_moscow", async (ctx) => {
-  await ctx.editMessageText("📍 <b>Выбери свой регион:</b>", {
-    parse_mode: "HTML",
+bot.action('tz_group_moscow', async (ctx) => {
+  await ctx.editMessageText('📍 <b>Выбери свой регион:</b>', {
+    parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("Москва / Питер (UTC+3)", "set_tz_Europe/Moscow")],
-      [Markup.button.callback("Минск (UTC+3)", "set_tz_Europe/Minsk")],
-      [Markup.button.callback("Баку (UTC+4)", "set_tz_Asia/Baku")],
-      [Markup.button.callback("⬅️ Назад в меню", "tz_back")]
+      [Markup.button.callback('Москва / Питер (UTC+3)', 'set_tz_Europe/Moscow')],
+      [Markup.button.callback('Минск (UTC+3)', 'set_tz_Europe/Minsk')],
+      [Markup.button.callback('Баку (UTC+4)', 'set_tz_Asia/Baku')],
+      [Markup.button.callback('⬅️ Назад в меню', 'tz_back')]
     ])
   })
 })
 
 // Подменю 3: Европа
-bot.action("tz_group_europe", async (ctx) => {
-  await ctx.editMessageText("📍 <b>Выбери европейское время:</b>", {
-    parse_mode: "HTML",
+bot.action('tz_group_europe', async (ctx) => {
+  await ctx.editMessageText('📍 <b>Выбери европейское время:</b>', {
+    parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("Берлин / Париж / Рим (UTC+1)", "set_tz_Europe/Berlin")],
-      [Markup.button.callback("Киев / Кишинев / Рига (UTC+2)", "set_tz_Europe/Kiev")],
-      [Markup.button.callback("Лондон / Дублин (UTC+0)", "set_tz_Europe/London")],
-      [Markup.button.callback("⬅️ Назад в меню", "tz_back")]
+      [Markup.button.callback('Берлин / Париж / Рим (UTC+1)', 'set_tz_Europe/Berlin')],
+      [Markup.button.callback('Киев / Кишинев / Рига (UTC+2)', 'set_tz_Europe/Kiev')],
+      [Markup.button.callback('Лондон / Дублин (UTC+0)', 'set_tz_Europe/London')],
+      [Markup.button.callback('⬅️ Назад в меню', 'tz_back')]
     ])
   })
 })
 
 // Подменю 4: Другие страны
-bot.action("tz_group_other", async (ctx) => {
-  await ctx.editMessageText("📍 <b>Популярные мировые пояса:</b>", {
-    parse_mode: "HTML",
+bot.action('tz_group_other', async (ctx) => {
+  await ctx.editMessageText('📍 <b>Популярные мировые пояса:</b>', {
+    parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback("Нью-Йорк / Восточное США (UTC-5)", "set_tz_America/New_York")],
-      [Markup.button.callback("Дубай / ОАЭ (UTC+4)", "set_tz_Asia/Dubai")],
-      [Markup.button.callback("Бангкок / Таиланд (UTC+7)", "set_tz_Asia/Bangkok")],
-      [Markup.button.callback("⬅️ Назад в меню", "tz_back")]
+      [Markup.button.callback('Нью-Йорк / Восточное США (UTC-5)', 'set_tz_America/New_York')],
+      [Markup.button.callback('Дубай / ОАЭ (UTC+4)', 'set_tz_Asia/Dubai')],
+      [Markup.button.callback('Бангкок / Таиланд (UTC+7)', 'set_tz_Asia/Bangkok')],
+      [Markup.button.callback('⬅️ Назад в меню', 'tz_back')]
     ])
   })
 })
 
 // Возврат в главное меню поясов
-bot.action("tz_back", async (ctx) => {
+bot.action('tz_back', async (ctx) => {
   await sendTimezoneMenu(ctx, true)
 })
 
@@ -129,22 +128,22 @@ bot.action(/^set_tz_(.+)$/, async (ctx) => {
     console.log(`👤 Пользователь ${telegramId} выбрал таймзону: ${selectedTimezone}`)
 
     // Убираем анимацию загрузки на кнопке Telegram
-    await ctx.answerCbQuery("Время успешно настроено! 🔥")
+    await ctx.answerCbQuery('Время успешно настроено! 🔥')
 
     // 🔥 УДАЛЯЕМ инлайн-меню из чата, чтобы оно не мозолило глаза
     await ctx.deleteMessage().catch(() => {})
 
     // Отправляем новое чистое сообщение без кнопок
     await ctx.replyWithHTML(
-      `🇺🇸 <b>AMERICAN ENGLISH ACADEMY</b>\n` +
-      `───────────────────────\n` +
-      `🎯 <b>Часовой пояс успешно сохранен!</b>\n\n` +
-      `Майкл зафиксировал твое локальное время. Выбранная зона: <code>${selectedTimezone}</code>.\n\n` +
-      `Теперь уроки и напоминалки (07:00, 13:00, 22:00) будут приходить строго по твоему будильнику! 👌`
+      '🇺🇸 <b>AMERICAN ENGLISH ACADEMY</b>\n' +
+      '───────────────────────\n' +
+      '🎯 <b>Часовой пояс успешно сохранен!</b>\n\n' +
+      'Майкл зафиксировал твое локальное время. Выбранная зона: <code>' + selectedTimezone + '</code>.\n\n' +
+      'Теперь уроки и напоминалки (07:00, 13:00, 22:00) будут приходить строго по твоему будильнику! 👌'
     )
   } catch (err) {
-    console.error("Ошибка при сохранении таймзоны в БД:", err)
-    await ctx.answerCbQuery("Произошла ошибка базы данных.")
+    console.error('Ошибка при сохранении таймзоны в БД:', err)
+    await ctx.answerCbQuery('Произошла ошибка базы данных.')
   }
 })
 
@@ -172,7 +171,7 @@ async function sendLongMessage(ctx, text, keyboard = null) {
   for (const line of lines) {
     if ((currentChunk + line).length > LIMIT) {
       await ctx.replyWithHTML(currentChunk)
-      currentChunk = '';
+      currentChunk = ''
     }
     currentChunk += line + '\n'
   }
@@ -189,9 +188,9 @@ bot.on('text', async ctx => {
   // 🔥 СТИЛИЗОВАЛИ ЗАГЛУШКУ ПОД ОБЩИЙ ДИЗАЙН АКАДЕМИИ
   if (!ctx.session.waitingForHomework) {
     return ctx.replyWithHTML(
-      `🤖 <b>AMERICAN ENGLISH ACADEMY</b>\n` +
-        `───────────────────────\n` +
-        `Привет, bro! Чтобы отправить текст на проверку ИИ-преподавателю, сначала нажми на кнопку <b>«📝 Сдать домашку»</b> в главном меню или введи команду /start.`,
+      '🤖 <b>AMERICAN ENGLISH ACADEMY</b>\n' +
+        '───────────────────────\n' +
+        'Привет, bro! Чтобы отправить текст на проверку ИИ-преподавателю, сначала нажми на кнопку <b>«📝 Сдать домашку»</b> в главном меню или введи команду /start.',
     )
   }
 
@@ -253,12 +252,19 @@ bot.on('text', async ctx => {
 - Категорически ЗАПРЕЩЕНО использовать Markdown.
   `
 
-    const response = await ai.models.generateContent({
+    // 🔥 ЗАМЕНИЛИ СТАРЫЙ ВЫЗОВ НА НАШ СЕРВИС С АВТОПОВТОРАМИ И КЛЮЧАМИ
+    const response = await generateContentWithRetry({
       model: 'gemini-2.0-flash',
       contents: prompt,
-    })
+    }, 3, 2500) // 3 попытки, задержка 2.5 сек при сетевых сбоях или 429 лимите
 
-    const aiReview = response.text
+    let aiReview = response.text
+    
+    // Очищаем от возможных обратных кавычек ```html, которые иногда генерирует Flash модель
+    aiReview = aiReview
+      .replace(/^```html?\s*/i, '')
+      .replace(/```\s*$/, '')
+
     await ctx.telegram
       .deleteMessage(ctx.chat.id, waitingMsg.message_id)
       .catch(() => {})
@@ -271,13 +277,13 @@ bot.on('text', async ctx => {
     ])
 
     const fullHeaderText =
-      `🇺🇸 <b>AMERICAN ENGLISH ACADEMY</b> 🎓\n` +
-      `⚡ <i>Hey bro! Твой личный разбор уже готов!</i>\n` +
-      `───────────────────────\n` +
-      `🎯 <b>Topic:</b> <code>${currentTopic} (Day ${currentDay})</code>\n` +
-      `👨‍🏫 <b>Teacher:</b> <i>Michael (40 years experience)</i>\n` +
-      `───────────────────────\n\n` +
-      `${aiReview}`
+      '🇺🇸 <b>AMERICAN ENGLISH ACADEMY</b> 🎓\n' +
+      '⚡ <i>Hey bro! Твой личный разбор уже готов!</i>\n' +
+      '───────────────────────\n' +
+      '🎯 <b>Topic:</b> <code>' + currentTopic + ' (Day ' + currentDay + ')</code>\n' +
+      '👨‍🏫 <b>Teacher:</b> <i>Michael (40 years experience)</i>\n' +
+      '───────────────────────\n\n' +
+      aiReview
 
     await sendLongMessage(ctx, fullHeaderText, keyboard)
   } catch (error) {
@@ -289,14 +295,15 @@ bot.on('text', async ctx => {
       .deleteMessage(ctx.chat.id, waitingMsg.message_id)
       .catch(() => {})
 
+    // Эта обработка сработает только если исчерпались вообще ВСЕ ключи из пула в aiService
     if (
       error.status === 429 ||
       (error.message && error.message.includes('429'))
     ) {
       return await ctx.replyWithHTML(
-        `⚠️ <b>Слишком много домашек!</b>\n\n` +
-          `Бро, ИИ-учитель проверяет задания со скоростью света, но Google временно приостановил нас из-за лимита запросов.\n\n` +
-          `⏳ <i>Подожди минутку и нажми кнопку ниже, чтобы отправить текст заново.</i>`,
+        '⚠️ <b>Слишком много домашек!</b>\n\n' +
+          'Бро, ИИ-учитель проверяет задания со скоростью света, но Google временно приостановил нас из-за лимита запросов.\n\n' +
+          '⏳ <i>Подожди минутку и нажми кнопку ниже, чтобы отправить текст заново.</i>',
         Markup.inlineKeyboard([
           [Markup.button.callback('📝 Сдать домашку', 'action_task')],
           [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
@@ -326,7 +333,7 @@ function startBot() {
       console.log(`✅ Веб-сервер запущен на Render. Слушаем порт: ${PORT}`)
       try {
         await bot.telegram.setWebhook(`${RENDER_URL}${secretPath}`)
-        console.log(`🚀 [English Master Bot] успешно запущен через WEBHOOK!`)
+        console.log('🚀 [English Master Bot] успешно запущен через WEBHOOK!')
       } catch (err) {
         console.error('❌ Ошибка установки вебхука Telegram:', err.message)
       }

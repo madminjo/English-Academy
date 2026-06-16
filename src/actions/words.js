@@ -1,30 +1,28 @@
 const { Markup } = require("telegraf");
 const topics = require("../data/topics");
-const { getUserById, updateWordsCount } = require("../services/userService"); // Подключили апдейт слов
-const wordService = require("../services/wordService"); // Сервис для работы со словами в БД
-const { GoogleGenAI } = require("@google/genai");
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const { getUserById, updateWordsCount } = require("../services/userService"); 
+const wordService = require("../services/wordService"); 
+const { generateContentWithRetry } = require("../services/aiService");
 
 const SYSTEM_INSTRUCTION = "Ты — харизматичный американский преподаватель английского языка по имени Майкл. Ты помогаешь студентам учить реальный разговорный американский английский (включая части тела, бытовые предметы, глаголы и актуальный уличный сленг).";
 
 const getPromptText = (topic) => {
-  return `Генерация для темы: "${topic}".\n` +
-    `Твоя задача — сгенерировать список ровно из 100 самых ходовых АМЕРИКАНСКИХ слов и выражений.\n\n` +
-    `ОБЯЗАТЕЛЬНО после 50-го слова поставь маркер [SPLIT] на отдельной строке, чтобы разделить текст ровно пополам для лимитов Telegram.\n\n` +
-    `Выдавай ответ СТРОГО в следующем формате без markdown блоков:\n\n` +
-    `📊 <b>АМЕРИКАНСКИЙ СЛОВАРЬ (Слова 1-50):</b>\n` +
-    `1. <b>[слово]</b> — [перевод] ([транскрипция])\n` +
-    `... до 50\n\n` +
-    `[SPLIT]\n\n` +
-    `📊 <b>АМЕРИКАНСКИЙ СЛОВАРЬ (Слова 51-100):</b>\n` +
-    `51. <b>[слово]</b> — [перевод] ([транскрипция])\n` +
-    `... до 100\n\n` +
-    `⚠️ СТРОЖАЙШИЕ ПРАВИЛА РАЗМЕТКИ:\n` +
-    `- Разрешено использовать ТОЛЬКО три тега: <b>, <i>, <code>.\n` +
-    `- Категорически ЗАПРЕЩЕНО использовать Markdown (никаких **, #, \`).\n` +
-    `- Категорически ЗАПРЕЩЕНО использовать теги списков <ul>, <ol>, <li>. Пиши цифры руками.\n` +
-    `- Пиши kompaktno, без лишней воды.`;
+  return "Генерация для темы: \"" + topic + "\".\n" +
+    "Твоя задача — сгенерировать список ровно из 100 самых ходовых АМЕРИКАНСКИХ слов и выражений.\n\n" +
+    "ОБЯЗАТЕЛЬНО после 50-го слова поставь маркер [SPLIT] на отдельной строке, чтобы разделить текст ровно пополам для лимитов Telegram.\n\n" +
+    "Выдавай ответ СТРОГО в следующем формате без markdown блоков:\n\n" +
+    "📊 <b>АМЕРИКАНСКИЙ СЛОВАРЬ (Слова 1-50):</b>\n" +
+    "1. <b>[слово]</b> — [перевод] ([транскрипция])\n" +
+    "... до 50\n\n" +
+    "[SPLIT]\n\n" +
+    "📊 <b>АМЕРИКАНСКИЙ СЛОВАРЬ (Слова 51-100):</b>\n" +
+    "51. <b>[слово]</b> — [перевод] ([транскрипция])\n" +
+    "... до 100\n\n" +
+    "⚠️ СТРОЖАЙШИЕ ПРАВИЛА РАЗМЕТКИ:\n" +
+    "- Разрешено использовать ТОЛЬКО три тега: <b>, <i>, <code>.\n" +
+    "- Категорически ЗАПРЕЩЕНО использовать Markdown (никаких **, #, `).\n" +
+    "- Категорически ЗАПРЕЩЕНО использовать теги списков <ul>, <ol>, <li>. Пиши цифры руками.\n" +
+    "- Пиши kompaktno, без лишней воды.";
 };
 
 module.exports = (bot) => {
@@ -51,9 +49,9 @@ module.exports = (bot) => {
     currentTopic = currentTopic || "Daily American English";
 
     await ctx.editMessageText(
-      `⏳ <b>Майкл проверяет архивы и собирает пак из 100 слов...</b>\n\n` +
-      `Тема: <code>День ${currentDay} — ${currentTopic}</code>\n\n` +
-      `<i>Если тема уже изучалась кем-то, загрузим мгновенно!</i>`, 
+      "⏳ <b>Майкл проверяет архивы и собирает пак из 100 слов...</b>\n\n" +
+      "Тема: <code>День " + currentDay + " — " + currentTopic + "</code>\n\n" +
+      "<i>Если тема уже изучалась кем-то, загрузим мгновенно!</i>", 
       { parse_mode: "HTML" }
     ).catch(() => {});
 
@@ -66,14 +64,12 @@ module.exports = (bot) => {
       if (cachedWords) {
         rawText = cachedWords;
       } else {
-        // Если в кэше БД пусто — делаем запрос к Gemini ИИ
-        const response = await ai.models.generateContent({
+        // Если в кэше БД пусто — генерируем через ИИ с ротацией аккаунтов
+        const response = await generateContentWithRetry({
           model: "gemini-2.0-flash", 
           contents: getPromptText(currentTopic),
-          config: {
-            systemInstruction: SYSTEM_INSTRUCTION
-          }
-        });
+          config: { systemInstruction: SYSTEM_INSTRUCTION }
+        }, 4, 3000); 
 
         rawText = response.text;
         
@@ -85,7 +81,7 @@ module.exports = (bot) => {
           .replace(/<li>/gi, "• ")
           .replace(/<\/li>/gi, "\n");
 
-        // 🔥 2. СОХРАНЯЕМ В КЭШ ТАБЛИЦЫ topic_words_cache ДЛЯ ПОСЛЕДУЮЩИХ ЮЗЕРОВ
+        // 🔥 2. СОХРАНЯЕМ В КЭШ ТАБЛИЦЫ ТВОЕЙ БД ДЛЯ ПОСЛЕДУЮЩИХ ЮЗЕРОВ
         await wordService.saveWordsToCache(currentTopic, rawText);
       }
 
@@ -93,24 +89,24 @@ module.exports = (bot) => {
       const partOne = parts[0] ? parts[0].trim() : "Не удалось сгенерировать первую часть слов.";
       const partTwo = parts[1] ? parts[1].trim() : "Не удалось сгенерировать вторую часть слов.";
 
-      // Сохраняем в сессию только временный черновик для подтверждения сохранения
+      // Сохраняем в сессию временный черновик
       ctx.session.generatedWords = rawText;
 
       const firstMessage = 
-        `🇺🇸 <b>MEGA VOCABULARY PACK (Часть 1/2)</b>\n` +
-        `───────────────────────\n` +
-        `🎯 <b>Тема:</b> <code>День ${currentDay} — ${currentTopic}</code>\n` +
-        `───────────────────────\n\n` +
-        `${partOne}`;
+        "🇺🇸 <b>MEGA VOCABULARY PACK (Часть 1/2)</b>\n" +
+        "───────────────────────\n" +
+        "🎯 <b>Тема:</b> <code>День " + currentDay + " — " + currentTopic + "</code>\n" +
+        "───────────────────────\n\n" +
+        partOne;
 
       await ctx.replyWithHTML(firstMessage);
 
       const secondMessage = 
-        `🇺🇸 <b>MEGA VOCABULARY PACK (Часть 2/2)</b>\n` +
-        `───────────────────────\n\n` +
-        `${partTwo}\n\n` +
-        `───────────────────────\n` +
-        `💡 <i>Выбери действие на панели ниже:</i>`;
+        "🇺🇸 <b>MEGA VOCABULARY PACK (Часть 2/2)</b>\n" +
+        "───────────────────────\n\n" +
+        partTwo + "\n\n" +
+        "───────────────────────\n" +
+        "💡 <i>Выбери действие на панели ниже:</i>";
 
       const keyboard = Markup.inlineKeyboard([
         [
@@ -126,9 +122,9 @@ module.exports = (bot) => {
       await ctx.replyWithHTML(secondMessage, { reply_markup: keyboard.reply_markup });
 
     } catch (error) {
-      console.error("❌ Ошибка обработки 100 слов:", error.message);
+      console.error("❌ Ошибка обработки 100 слов через пул ИИ:", error.message);
       await ctx.replyWithHTML(
-        `⚠️ Не удалось загрузить мега-пак слов. Давай попробуем еще раз, bro!`, 
+        "⚠️ Не удалось загрузить мега-пак слов. Давай попробуем еще раз, bro!", 
         { reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]]).reply_markup }
       ).catch(() => {});
     }
@@ -149,7 +145,7 @@ module.exports = (bot) => {
         .split("\n")
         .map(line => line.trim())
         .filter(line => line && /^\d+\./.test(line))
-        .map(line => line.replace(/^\d+\.\s*/, "")); // Срезаем цифры списка вроде "1. "
+        .map(line => line.replace(/^\d+\.\s*/, "")); 
 
       if (cleanWords.length === 0) {
         return ctx.answerCbQuery("⚠️ Не удалось отформатировать слова.", { show_alert: true });
@@ -164,7 +160,7 @@ module.exports = (bot) => {
       // Сбрасываем кэш временного черновика
       ctx.session.generatedWords = null;
 
-      await ctx.answerCbQuery(`📥 Успешно! +${cleanWords.length} слов добавлено в твой личный профиль!`, { show_alert: true });
+      await ctx.answerCbQuery("📥 Успешно! +" + cleanWords.length + " слов добавлено в твой личный профиль!", { show_alert: true });
       
       const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback("🗂 Открыть мой словарь", "action_my_vocabulary")],
@@ -182,7 +178,7 @@ module.exports = (bot) => {
   bot.action("action_cancel_words", async (ctx) => {
     if (!ctx.session) ctx.session = {};
     
-    ctx.session.generatedWords = null; // Стираем только временный черновик
+    ctx.session.generatedWords = null; 
     
     await ctx.answerCbQuery("❌ Действие отменено", { show_alert: false });
     

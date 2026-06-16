@@ -1,9 +1,8 @@
 const { Markup } = require("telegraf");
 const topics = require("../data/topics");
 const { getUserById, updateUserDay } = require("../services/userService");
-// 🔥 ПОДКЛЮЧАЕМ ИИ ДЛЯ ГЕНЕРАЦИИ ОБЪЯСНЕНИЯ ТЕМЫ
-const { GoogleGenAI } = require("@google/genai");
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Импортируем наш метод пула аккаунтов вместо прямого подключения GoogleGenAI
+const { generateContentWithRetry } = require("../services/aiService");
 
 module.exports = (bot) => {
   
@@ -12,9 +11,9 @@ module.exports = (bot) => {
     await ctx.answerCbQuery().catch(() => {});
 
     const text = 
-      `🎯 <b>ВЫБОР УРОВНЯ ОБУЧЕНИЯ</b>\n` +
-      `───────────────────────\n` +
-      `Выбери интересующий тебя уровень, чтобы посмотреть список входящих в него тем, или открой полный каталог курсов:`;
+      "🎯 <b>ВЫБОР УРОВНЯ ОБУЧЕНИЯ</b>\n" +
+      "───────────────────────\n" +
+      "Выбери интересующий тебя уровень, чтобы посмотреть список входящих в него тем, или открой полный каталог курсов:";
 
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback("🟢 A1 - Starter", "level_A1"), Markup.button.callback("🟡 A2 - Pre-Int", "level_A2")],
@@ -32,16 +31,31 @@ module.exports = (bot) => {
   bot.action(/^select_day_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const targetDay = parseInt(ctx.match[1], 10);
-    const topicName = topics.getTopicById(targetDay) || "Выбранный урок";
+    
+    // Безопасный поиск названия темы по ID из структуры уровней
+    let topicName = "Выбранный урок";
+    if (typeof topics.getTopicById === "function") {
+      topicName = topics.getTopicById(targetDay);
+    } else {
+      for (const level in topics) {
+        if (Array.isArray(topics[level])) {
+          const found = topics[level].find(t => t && t.id === targetDay);
+          if (found) {
+            topicName = found.title || found.name || topicName;
+            break;
+          }
+        }
+      }
+    }
 
     // Отправляем промежуточный статус
-    await ctx.editMessageText(`⏳ <b>Майкл уже открывает свой конспект...</b>\n\nГотовим интерактивный разбор темы: <code>День ${targetDay} — ${topicName}</code>. Секундочку, bro!`, { parse_mode: "HTML" }).catch(() => {});
+    await ctx.editMessageText("⏳ <b>Майкл уже открывает свой конспект...</b>\n\nГотовим интерактивный разбор темы: <code>День " + targetDay + " — " + topicName + "</code>. Секундочку, bro!", { parse_mode: "HTML" }).catch(() => {});
 
     try {
       // 1. Сохраняем новый день в базу данных Postgres (Neon)
       await updateUserDay(ctx.from.id, targetDay);
 
-      // 2. Стучимся к Gemini
+      // 2. Формируем запрос к Gemini
       const prompt = `
 Ты — харизматичный американский преподаватель английского языка по имени Майкл с 40-летним опытом. 
 Ты виртуозно владеешь русским языком и используешь его, чтобы объяснять русскоязычным студентам сложнейшие правила английского так просто, живо и весело, будто твоему ученику 10 лет. 
@@ -69,32 +83,31 @@ module.exports = (bot) => {
 3. Абсолютно ЗАПРЕЩЕНО использовать теги списков <ul>, <ol>, <li>! Если хочешь сделать список предложений, пиши обычными цифрами с точкой (1., 2., 3.) или эмодзи, перенося строки через обычный \\n.
 `;
 
-      const response = await ai.models.generateContent({
+      const response = await generateContentWithRetry({
         model: "gemini-2.0-flash", 
         contents: prompt,
-      });
+      }, 4, 3000); // 4 попытки, шаг паузы 3 секунды
 
       let aiExplanation = response.text;
 
       // 🔥 ПРОГРАММНЫЙ ФИЛЬТР-ПРЕДОХРАНИТЕЛЬ:
-      // Очищаем неподдерживаемые теги и убираем обёртки маркдауна типа ```html, если они прилетели
       aiExplanation = aiExplanation
-        .replace(/^```html?\s*/i, '') // Убираем стартовые тройные бэктики ```html
-        .replace(/```\s*$/, '')       // Убираем финальные тройные бэктики ```
-        .replace(/<\/?ul>/gi, '')     // вырезаем <ul> и </ul>
-        .replace(/<\/?ol>/gi, '')     // вырезаем <ol> и </ol>
-        .replace(/<li>/gi, '• ')       // заменяем открывающийся элемент списка на точку
-        .replace(/<\/li>/gi, '\n');    // закрывающийся элемент превращаем в перенос строки
+        .replace(/^```html?\s*/i, '') 
+        .replace(/```\s*$/, '')       
+        .replace(/<\/?ul>/gi, '')     
+        .replace(/<\/?ol>/gi, '')     
+        .replace(/<li>/gi, '• ')       
+        .replace(/<\/li>/gi, '\n');    
 
       // 3. Формируем финальное стильное сообщение
       const finalExplanationText = 
-        `✅ <b>ПРОГРАММА УСПЕШНО ИЗМЕНЕНА!</b>\n` +
-        `───────────────────────\n` +
-        `🎯 <b>Текущий активный урок:</b> <code>День ${targetDay} — ${topicName}</code>\n` +
-        `───────────────────────\n\n` +
-        `${aiExplanation}\n` +
-        `───────────────────────\n` +
-        `👨‍🏫 <i>"Теперь ты готов к практике, bro! Нажми на кнопку ниже, чтобы закрепить тему и сдать домашку!"</i>`;
+        "✅ <b>ПРОГРАММА УСПЕШНО ИЗМЕНЕНА!</b>\n" +
+        "───────────────────────\n" +
+        "🎯 <b>Текущий активный урок:</b> <code>День " + targetDay + " — " + topicName + "</code>\n" +
+        "───────────────────────\n\n" +
+        aiExplanation + "\n" +
+        "───────────────────────\n" +
+        "👨‍🏫 <i>\"Now you are ready for some action, bro! Нажми на кнопку ниже, чтобы закрепить тему и сдать домашку!\"</i>";
 
       const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback("📝 Сдать домашку по этой теме", "action_task")],
@@ -109,7 +122,7 @@ module.exports = (bot) => {
 
     } catch (error) {
       console.error("❌ Ошибка при смене урока или генерации ИИ:", error.message);
-      await ctx.reply("⚠️ Произошла ошибка при подготовке урока. Но курс переключен! Ты можешь перейти в раздел «📝 Сдать домашку».");
+      await ctx.reply("⚠️ Произошла ошибка при подготовке урока через пул аккаунтов. Но курс переключен! Ты можешь перейти в раздел «📝 Сдать домашку».");
     }
   });
 
@@ -131,7 +144,7 @@ module.exports = (bot) => {
       }
     } else {
       const exactKey = Object.keys(topics).find(key => key.startsWith(targetLevel));
-      titleHeader = `📈 УРОВЕНЬ: ${exactKey || targetLevel}`;
+      titleHeader = "📈 УРОВЕНЬ: " + (exactKey || targetLevel);
       if (exactKey && Array.isArray(topics[exactKey])) filteredTopics = topics[exactKey];
     }
 
@@ -141,14 +154,14 @@ module.exports = (bot) => {
     filteredTopics.forEach((topic) => {
       if (topic && topic.id) {
         const isCurrent = topic.id === userDay;
-        buttonsGrid.push([Markup.button.callback(`${isCurrent ? "🔥" : "📖"} День ${topic.id} — ${topic.title}`, `select_day_${topic.id}`)]);
-        if (isCurrent) descriptionText = `\n🎯 <b>Сейчас твой активный урок:</b> <code>День ${topic.id} — ${topic.title}</code>\n\n`;
+        buttonsGrid.push([Markup.button.callback((isCurrent ? "🔥" : "📖") + " День " + topic.id + " — " + topic.title, "select_day_" + topic.id)]);
+        if (isCurrent) descriptionText = "\n🎯 <b>Сейчас твой активный урок:</b> <code>День " + topic.id + " — " + topic.title + "</code>\n\n";
       }
     });
 
     buttonsGrid.push([Markup.button.callback("⬅️ К выбору уровней", "action_lessons")]);
 
-    await ctx.editMessageText(`🎯 <b>${titleHeader}</b>\n───────────────────────\n${descriptionText}👇 <b>Кликни по любому уроку ниже, чтобы переключить программу обучения и сразу получить разбор от Майкла:</b>`, {
+    await ctx.editMessageText("🎯 <b>" + titleHeader + "</b>\n───────────────────────\n" + descriptionText + "👇 <b>Кликни по любому уроку ниже, чтобы переключить программу обучения и сразу получить разбор от Майкла:</b>", {
       parse_mode: "HTML",
       reply_markup: Markup.inlineKeyboard(buttonsGrid).reply_markup
     }).catch(() => {});
@@ -166,7 +179,7 @@ module.exports = (bot) => {
   // Временная заглушка для напоминаний
   bot.action("action_reminders", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
-    await ctx.editMessageText(`🔔 <b>Настройка уведомлений</b>\n\n⚙️ Модуль умных напоминаний создается. Здесь ты сможешь настроить удобное время для ежедневных тренивок!`, {
+    await ctx.editMessageText("🔔 <b>Настройка уведомлений</b>\n\n⚙️ Модуль умных напоминаний создается. Здесь ты сможешь настроить удобное время для ежедневных тренивок!", {
       parse_mode: "HTML",
       reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⬅️ Назад", "action_main_menu")]]).reply_markup
     }).catch(() => {});
