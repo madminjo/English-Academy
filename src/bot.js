@@ -221,21 +221,21 @@ bot.on('text', async ctx => {
   }
 });
 
+// Обработчик нажатия на кнопку "👤 Профиль" в меню
 bot.action('action_profile', async (ctx) => {
-  // Вызываем обработку команды /profile вручную
-  // Для этого убедись, что твоя команда /profile экспортирует функцию, 
-  // которую можно вызвать, либо просто продублируй вызов функции getUser здесь.
+  // 1. Убираем "часики" (Loading)
+  await ctx.answerCbQuery().catch(() => {});
   
-  // Самый простой способ — имитировать команду /profile:
-  // (Предполагается, что у тебя в index.js функция команды вынесена в отдельную логику)
-  
-  // Если не хочешь переделывать команды, просто скопируй логику из profile.js сюда:
-  const { getUser } = require('../services/userService');
+  // 2. Вызываем логику профиля (которую мы поправили)
+  const { getUser } = require('./services/userService');
   const user = await getUser(ctx.from.id);
   
-  if (!user) return ctx.answerCbQuery("Сначала нажми /start!");
+  if (!user) return ctx.reply("Сначала нажми /start!");
 
-  const statusDisplay = user.status === 'free' ? '🆓 Free' : `💎 Premium (${user.status.toUpperCase()})`;
+  // 3. Формируем текст (используем исправленное условие статуса)
+  const statusDisplay = user.status === 'free' 
+    ? '🆓 Free' 
+    : `💎 Premium (${user.status.toUpperCase()})`;
 
   const profileText = `
 👤 <b>Твой профиль:</b>
@@ -249,7 +249,7 @@ bot.action('action_profile', async (ctx) => {
 🧠 <b>Выучено слов:</b> ${user.words_learned}
 `;
 
-  await ctx.answerCbQuery(); // Закрываем "часики" у кнопки
+  // 4. Отправляем ответ
   await ctx.editMessageText(profileText, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
