@@ -8,28 +8,29 @@ const { sanitizeForTelegram } = require("../utils/textFormatter");
 const SYSTEM_INSTRUCTION = "Ты — харизматичный американский преподаватель английского языка по имени Майкл. Ты помогаешь студентам учить реальный разговорный американский английский.";
 
 const getPromptText = (topic) => {
-  return 'Ты — Майкл. Твоя задача — составить для студента МЕГА-ПАК из 30 самых сочных слов по теме: "' + topic + '".\n' +
-    'Формат строго такой:\n' +
-    '1. Слово — Перевод (Транскрипция)\n' +
-    'Майкл: Сленговый комментарий\n\n' +
-    'Правила: Никакого Markdown. Заголовок: 📊 АМЕРИКАНСКИЙ СЛОВАРЬ (30 самых важных слов):';
+  return `Ты — Майкл. Составь список из 30 самых важных слов по теме: "${topic}".
+  Формат: 
+  1. Слово — Перевод (Транскрипция)
+  Майкл: Комментарий
+  Заголовок: 📊 АМЕРИКАНСКИЙ СЛОВАРЬ (30 самых важных слов):`;
 };
 
 module.exports = (bot) => {
-  bot.action("action_words", async (ctx) => {
+  // Обработчик для обоих случаев: просто слова и принудительное обновление
+  bot.action(/^action_words(:force)?$/, async (ctx) => {
+    const isForceUpdate = ctx.match[1] === ':force'; // Проверяем, есть ли флаг обновления
     await ctx.answerCbQuery().catch(() => {});
     
     if (!ctx.session) ctx.session = {};
-    
     let currentTopic = ctx.session.currentTopic || "Daily American English";
     let currentDay = ctx.session.currentDay || 1;
 
-    // Сразу шлем "Загрузку", чтобы пользователь видел реакцию
-    const statusMsg = await ctx.reply("⏳ <b>Майкл проверяет архивы и собирает пак...</b>", { parse_mode: "HTML" });
+    const statusMsg = await ctx.reply("⏳ <b>Майкл собирает пак...</b>", { parse_mode: "HTML" });
 
     try {
       let rawText = "";
-      const cachedWords = await wordService.getWordsByTopic(currentTopic);
+      // Если force — пропускаем кэш
+      const cachedWords = isForceUpdate ? null : await wordService.getWordsByTopic(currentTopic);
 
       if (cachedWords) {
         rawText = cachedWords;
@@ -57,13 +58,16 @@ module.exports = (bot) => {
         "───────────────────────\n" +
         "💡 <i>Выбери действие:</i>";
 
+      // Добавили кнопку "🔄 Обновить"
       const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback("📥 Сохранить всё", "action_save_words"), Markup.button.callback("❌ Отмена", "action_cancel_words")],
-        [Markup.button.callback("🗂 Мой словарь", "action_my_vocabulary")],
+        [
+            Markup.button.callback("📥 Сохранить", "action_save_words"), 
+            Markup.button.callback("🔄 Обновить", "action_words:force")
+        ],
+        [Markup.button.callback("❌ Отмена", "action_cancel_words")],
         [Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]
       ]);
 
-      // Удаляем плашку загрузки и отправляем результат
       await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
       await ctx.replyWithHTML(finalMessage, { reply_markup: keyboard.reply_markup });
 
@@ -79,7 +83,6 @@ module.exports = (bot) => {
     if (!wordsToSave) return ctx.answerCbQuery("⚠️ Данные устарели!", { show_alert: true });
 
     try {
-      // Парсим только строки с цифрами
       const lines = wordsToSave.split("\n").filter(l => /^\d+\./.test(l));
       const cleanWords = lines.map(line => ({
         word: line.replace(/^\d+\.\s*/, "").split("—")[0].trim(),
