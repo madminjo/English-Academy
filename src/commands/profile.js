@@ -7,12 +7,17 @@ module.exports = (bot) => {
       const user = await getUser(ctx.from.id);
       if (!user) return ctx.reply("Сначала нажми /start, чтобы зарегистрироваться!");
 
-      const profileText = `
+// Проверяем, не 'free' ли статус. Если не 'free', значит — подписка активна.
+const statusDisplay = user.status === 'free' 
+  ? '🆓 Free' 
+  : `💎 Premium (${user.status.toUpperCase()})`;
+
+const profileText = `
 👤 <b>Твой профиль:</b>
 ───────────────────────
 🆔 <b>ID:</b> ${user.telegram_id}
 📛 <b>Имя:</b> ${user.first_name || '—'}
-👑 <b>Статус:</b> ${user.status === 'premium' ? '💎 Premium' : '🆓 Free'}
+👑 <b>Статус:</b> ${statusDisplay}
 📅 <b>Подписка до:</b> ${user.sub_end_date ? new Date(user.sub_end_date).toLocaleDateString() : '—'}
 📈 <b>Уровень:</b> ${user.level}
 🔥 <b>Стрик:</b> ${user.streak} дней
