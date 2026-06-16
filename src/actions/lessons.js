@@ -3,6 +3,7 @@ const topics = require("../data/topics");
 const { getUserById, updateUserDay } = require("../services/userService");
 // Импортируем наш метод пула аккаунтов вместо прямого подключения GoogleGenAI
 const { generateContentWithRetry } = require("../services/aiService");
+const { sanitizeForTelegram } = require("../utils/textFormatter");
 
 module.exports = (bot) => {
   
@@ -88,7 +89,7 @@ const prompt = `
         contents: prompt,
       }, 4, 3000); // 4 попытки, шаг паузы 3 секунды
 
-      let aiExplanation = response.text;
+     let aiExplanation = sanitizeForTelegram(response.text);
 
       // 🔥 ПРОГРАММНЫЙ ФИЛЬТР-ПРЕДОХРАНИТЕЛЬ:
 // Удаляем вложенные теги, которые вызывают конфликт
