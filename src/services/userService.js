@@ -103,15 +103,20 @@ async function incrementRequests(id) {
 
 
 async function updateUserLanguage(id, lang) {
-  // Допускаем только 'en' или 'de'
-  const validLangs = ['en', 'de'];
-  if (!validLangs.includes(lang)) {
-    throw new Error("Недопустимый язык!");
+  try {
+    await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
+  } catch (error) {
+    // Код ошибки 42703 означает "column does not exist"
+    if (error.code === '42703') {
+      console.log("⚠️ Колонка 'lang' не найдена, создаю...");
+      await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS lang VARCHAR(2) DEFAULT 'en'");
+      // Повторяем попытку после создания
+      await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
+    } else {
+      throw error;
+    }
   }
-  
-  await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
 }
-
 async function getUserLanguage(id) {
   const user = await getUser(id);
   return user ? user.lang : 'en'; // По умолчанию английский
