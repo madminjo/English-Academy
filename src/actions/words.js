@@ -70,7 +70,7 @@ module.exports = (bot) => {
         if (!response || !response.text) {
           throw new Error("Пустой ответ от ИИ");
         }
-
+        console.log("✅ Получен ответ от ИИ для темы '" + currentTopic + "':", response.text.substring(0, 100) + "...");
 rawText = sanitizeForTelegram(response.text);
         
         // Сохраняем в кэш БД (уже очищенный текст)
