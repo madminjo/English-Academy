@@ -130,6 +130,7 @@ module.exports = (bot) => {
   });
 
   // ОБРАБОТЧИК КНОПКИ "СОХРАНИТЬ ПАК"
+// ОБРАБОТЧИК КНОПКИ "СОХРАНИТЬ ПАК"
   bot.action("action_save_words", async (ctx) => {
     if (!ctx.session) ctx.session = {};
     const wordsToSave = ctx.session.generatedWords;
@@ -139,19 +140,66 @@ module.exports = (bot) => {
     }
 
     try {
-      const cleanWords = wordsToSave
+      // 1. Разбиваем текст на строки и фильтруем только нумерованные
+      const lines = wordsToSave
         .split("\n")
         .map(line => line.trim())
-        .filter(line => line && /^\d+\./.test(line))
-        .map(line => line.replace(/^\d+\.\s*/, "")); 
+        .filter(line => line && /^\d+\./.test(line));
 
-      if (cleanWords.length === 0) {
-        return ctx.answerCbQuery("⚠️ Не удалось отформатировать слова.", { show_alert: true });
+      const cleanWords = [];
+
+      for (let line of lines) {
+        // Убираем нумерацию (например, "1. " или "24. ")
+        let cleanLine = line.replace(/^\d+\.\s*/, "");
+        
+        // Очищаем от HTML тегов <b>, </i>, <code>, чтобы в БД сохранялся чистый текст
+        cleanLine = cleanLine.replace(/<\/?[^>]+(>|$)/g, "");
+
+        // Парсим строку формата: "Слово — Перевод (транскрипция)"
+        // Разбиваем по длинному или короткому тире
+        const parts = cleanLine.split(/—|-/);
+        if (parts.length >= 2) {
+          const word = parts[0].trim();
+          let rest = parts.slice(1).join("—").trim();
+          
+          // Извлекаем транскрипцию, если она есть в скобках
+          let transcription = "";
+          const transcriptionMatch = rest.match(/\((.*?)\)/);
+          if (transcriptionMatch) {
+            transcription = transcriptionMatch[1].trim();
+            // Убираем транскрипцию из перевода
+            rest = rest.replace(/\s*\(.*?\)\s*/g, "").trim();
+          }
+          
+          const translation = rest;
+
+          // Добавляем структурированный объект в массив
+          cleanWords.push({
+            word: word,
+            translation: translation,
+            transcription: transcription
+          });
+        } else {
+          // Если строка не распарсилась по тире, сохраняем её целиком как слово (фоллбэк)
+          cleanWords.push({
+            word: cleanLine,
+            translation: "",
+            transcription: ""
+          });
+        }
       }
 
+      if (cleanWords.length === 0) {
+        return ctx.answerCbQuery("⚠️ Не удалось отформатировать слова для базы.", { show_alert: true });
+      }
+
+      // 🔥 2. Передаем в сервис структурированный массив
       await wordService.saveUserVocabulary(ctx.from.id, cleanWords);
+      
+      // Глобальный счётчик изученных слов
       await updateWordsCount(ctx.from.id, cleanWords.length);
 
+      // Сбрасываем кэш сессии
       ctx.session.generatedWords = null;
 
       await ctx.answerCbQuery("📥 Успешно! +" + cleanWords.length + " слов добавлено в твой личный профиль!", { show_alert: true });
@@ -163,8 +211,9 @@ module.exports = (bot) => {
       await ctx.editMessageReplyMarkup(keyboard.reply_markup).catch(() => {});
 
     } catch (err) {
-      console.error("Ошибка при сохранении слов в БД:", err.message);
-      await ctx.answerCbQuery("⚠️ Ошибка базы данных при сохранении.", { show_alert: true });
+      console.error("❌ Критическая ошибка при сохранении слов в БД:", err);
+      // Выводим реальную ошибку в alert для отладки, если это локальный тест
+      await ctx.answerCbQuery("⚠️ Ошибка БД: " + err.message, { show_alert: true });
     }
   });
 
