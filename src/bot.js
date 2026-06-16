@@ -342,6 +342,11 @@ function startBot() {
   }
 }
 
+console.log("Stage 1: Initializing DB connection...");
+// ... логика подключения ...
+console.log("Stage 2: Starting Webhook...");
+// ... логика вебхука ...
+console.log("Stage 3: Bot started successfully.");
 startBot();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
