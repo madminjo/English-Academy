@@ -44,7 +44,7 @@ module.exports = (bot) => {
     
     currentTopic = currentTopic || "Daily American English";
 
-    // Изменили текст на 30 слов, чтобы соответствовать логике
+    // 1. Показываем плашку загрузки
     await ctx.editMessageText(
       "⏳ <b>Майкл проверяет архивы и собирает пак из 30 слов...</b>\n\n" +
       "Тема: <code>День " + currentDay + " — " + currentTopic + "</code>\n\n" +
@@ -55,13 +55,13 @@ module.exports = (bot) => {
     try {
       let rawText = "";
 
-      // 🔥 1. ИЩЕМ ТЕМУ В ГЛОБАЛЬНОМ КЭШЕ БАЗЫ ДАННЫХ
+      // Ищем тему в глобальном кэше базы данных
       const cachedWords = await wordService.getWordsByTopic(currentTopic);
 
       if (cachedWords) {
         rawText = cachedWords;
       } else {
-        // Если в кэше БД пусто — генерируем через ИИ с ротацией аккаунтов
+        // Если в кэше пусто — генерируем через ИИ
         const response = await generateContentWithRetry({
           model: "gemini-2.0-flash", 
           contents: getPromptText(currentTopic),
@@ -78,17 +78,16 @@ module.exports = (bot) => {
           .replace(/<li>/gi, "• ")
           .replace(/<\/li>/gi, "\n");
 
-        // Предохранитель от случайных звёздочек нейронки
+        // Предохранитель от звёздочек
         rawText = rawText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-        // 🔥 2. СОХРАНЯЕМ В КЭШ ТАБЛИЦЫ ТВОЕЙ БД ДЛЯ ПОСЛЕДУЮЩИХ ЮЗЕРОВ
+        // Сохраняем в кэш БД для последующих юзеров
         await wordService.saveWordsToCache(currentTopic, rawText);
       }
 
-      // Подстраховка очистки звёздочек, если текст поднялся старый из кэша
+      // Подстраховка очистки звёздочек для старого кэша
       rawText = rawText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
 
-      // Сохраняем в сессию временный черновик
       ctx.session.generatedWords = rawText;
 
       const finalMessage = 
@@ -111,10 +110,18 @@ module.exports = (bot) => {
         [Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]
       ]);
 
+      // 🔥 УДАЛЯЕМ СООБЩЕНИЕ С ЗАГРУЗКОЙ (оно же старое сообщение меню)
+      await ctx.deleteMessage().catch(() => {});
+
+      // Отправляем чистый и красивый финальный ответ
       await ctx.replyWithHTML(finalMessage, { reply_markup: keyboard.reply_markup });
 
     } catch (error) {
       console.error("❌ Ошибка обработки слов через пул ИИ:", error.message);
+      
+      // 🔥 На случай ошибки тоже удаляем плашку загрузки, чтобы не висела вечно
+      await ctx.deleteMessage().catch(() => {});
+
       await ctx.replyWithHTML(
         "⚠️ Не удалось загрузить мега-пак слов. Давай попробуем еще раз, bro!", 
         { reply_markup: Markup.inlineKeyboard([[Markup.button.callback("⬅️ Назад в меню", "action_main_menu")]]).reply_markup }
