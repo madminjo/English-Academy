@@ -16,7 +16,7 @@ bot.use(session());
 
 // 🔥 ЗАЩИТА: Весь входящий трафик (кнопки, сообщения, команды) идет через этот фильтр
 bot.use(subscriptionGuard);
-const { getAllUsers, setUserStatus, canRequest, incrementRequests, getUser } = require('./services/userService');
+const { getAllUsers, setUserStatus, canRequest, incrementRequests, getUser, setSubscription } = require('./services/userService');
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot);
@@ -107,15 +107,16 @@ bot.action(/^adm_manage_(\d+)$/, async (ctx) => {
 });
 
 // Обработка продления
+// Обработчик для кнопок срока (mo1, mo3, mo6, mo12)
 bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async (ctx) => {
   const userId = ctx.match[1];
-  const term = ctx.match[2]; // mo1, mo3, mo6, mo12
+  const term = ctx.match[2]; // Получаем 'mo1', 'mo3' и т.д.
   
-  // Используем твою готовую функцию setSubscription из userService
+  // Вызываем функцию установки подписки
   await setSubscription(userId, term); 
   
-  await ctx.answerCbQuery(`Успешно продлено на ${term}`);
-  await ctx.editMessageText(`✅ <b>Пользователь ${userId} успешно продлен!</b>`, {
+  await ctx.answerCbQuery(`Подписка установлена на ${term}`);
+  await ctx.editMessageText(`✅ <b>Пользователь ${userId} успешно переведен на статус ${term}!</b>`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
   });
@@ -138,6 +139,7 @@ bot.action(/^adm_choose_term_(\d+)$/, async (ctx) => {
   await ctx.editMessageText(`<b>Выберите срок продления для ${userId}:</b>`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
+      // Добавляем callback_data!
       [Markup.button.callback('1 Месяц', `adm_prolong_${userId}_mo1`)],
       [Markup.button.callback('3 Месяца', `adm_prolong_${userId}_mo3`)],
       [Markup.button.callback('6 Месяцев', `adm_prolong_${userId}_mo6`)],
