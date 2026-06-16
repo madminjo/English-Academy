@@ -56,14 +56,22 @@ async function setSubscription(id, status) {
 
 // 7. 🔥 Проверка статуса (автоматически скидывает в 'free', если время вышло)
 async function isSubActive(id) {
+  // Атомарный запрос: проверяем и обновляем одним махом
+  // 1. Сбрасываем статус, если время истекло
+  await db.query(`
+    UPDATE users 
+    SET status = 'free', sub_end_date = NULL 
+    WHERE telegram_id = $1 
+    AND status != 'free' 
+    AND sub_end_date IS NOT NULL 
+    AND sub_end_date < NOW()
+  `, [id]);
+
+  // 2. Получаем актуальный статус пользователя
   const user = await getUser(id);
-  if (!user || user.status === 'free') return false;
   
-  if (user.sub_end_date && new Date() > new Date(user.sub_end_date)) {
-    await db.query(`UPDATE users SET status = 'free', sub_end_date = NULL WHERE telegram_id = $1`, [id]);
-    return false;
-  }
-  return true;
+  // Возвращаем true только если статус не 'free'
+  return user && user.status !== 'free';
 }
 // Добавь это в userService.js
 async function canRequest(id) {
@@ -95,6 +103,12 @@ async function incrementRequests(id) {
 
 
 async function updateUserLanguage(id, lang) {
+  // Допускаем только 'en' или 'de'
+  const validLangs = ['en', 'de'];
+  if (!validLangs.includes(lang)) {
+    throw new Error("Недопустимый язык!");
+  }
+  
   await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
 }
 
