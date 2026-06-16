@@ -1,7 +1,8 @@
 {
   "name": "english-master-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "commonjs",
+  "main": "src/bot.js",
   "scripts": {
     "start": "node src/bot.js",
     "dev": "nodemon src/bot.js"
