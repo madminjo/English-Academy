@@ -208,6 +208,12 @@ bot.on('text', async ctx => {
   ctx.session.waitingForHomework = false;
   
   const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...');
+
+  // ... после успешной отправки запроса в ИИ:
+const remaining = await incrementRequests(ctx.from.id);
+console.log(`Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`);
+
+
   await incrementRequests(ctx.from.id);
 
   try {
@@ -311,9 +317,6 @@ bot.action(/set_lang_(en|de)/, async (ctx) => {
 });
 
 
-// ... после успешной отправки запроса в ИИ:
-const remaining = await incrementRequests(ctx.from.id);
-console.log(`Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`);
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
