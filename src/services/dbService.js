@@ -1,17 +1,25 @@
 const { Pool } = require("pg");
 
-// Создаем пул подключений к PostgreSQL (Neon автоматически подтянет URL из .env)
+// Диагностика: выводим начало URL, чтобы убедиться, что он вообще загрузился
+if (!process.env.DATABASE_URL) {
+  console.error("CRITICAL: DATABASE_URL is not set in environment variables!");
+} else {
+  console.log("DB Service: Connected to database.");
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    // Этот параметр обязателен для безопасного подключения к облачной базе Neon
     rejectUnauthorized: false 
   }
 });
 
 module.exports = {
-  /**
-   * Универсальный метод для выполнения SQL-запросов к базе данных
-   */
-  query: (text, params) => pool.query(text, params),
+  query: (text, params) => {
+    // Логируем запрос для отладки, если что-то падает
+    return pool.query(text, params).catch(err => {
+      console.error("DB Query Error:", err.message, "SQL:", text);
+      throw err;
+    });
+  },
 };
