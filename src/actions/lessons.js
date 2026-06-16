@@ -124,14 +124,15 @@ ${settings.persona}
         .replace(/<li>/gi, '• ')       
         .replace(/<\/li>/gi, '\n');
 
-      // 3. Формируем финальное стильное сообщение
-      const finalExplanationText = 
+// 3. Формируем финальное стильное сообщение
+      const header = 
         "✅ <b>ПРОГРАММА УСПЕШНО ИЗМЕНЕНА!</b>\n" +
         "───────────────────────\n" +
         "🎯 <b>Текущий активный урок:</b> <code>День " + targetDay + " — " + topicName + "</code>\n" +
-        "───────────────────────\n\n" +
-        aiExplanation + "\n" +
-        "───────────────────────\n" +
+        "───────────────────────\n\n";
+
+      const footer = 
+        "\n───────────────────────\n" +
         "👨‍🏫 <i>\"Now you are ready for some action, bro! Нажми на кнопку ниже, чтобы закрепить тему и сдать домашку!\"</i>";
 
       const keyboard = Markup.inlineKeyboard([
@@ -139,11 +140,35 @@ ${settings.persona}
         [Markup.button.callback("⬅️ Вернуться к урокам", "action_lessons"), Markup.button.callback("🏠 В меню", "action_main_menu")]
       ]);
 
-      // Изменяем сообщение на готовый разбор
-      await ctx.editMessageText(finalExplanationText, {
-        parse_mode: "HTML",
-        reply_markup: keyboard.reply_markup
-      }).catch((err) => console.error("Ошибка обновления сообщения:", err));
+      const MAX = 4000;
+      const fullText = header + aiExplanation + footer;
+
+      if (fullText.length <= MAX) {
+        // Всё влезает — обычный edit
+        await ctx.editMessageText(fullText, {
+          parse_mode: "HTML",
+          reply_markup: keyboard.reply_markup
+        }).catch((err) => console.error("Ошибка обновления сообщения:", err));
+      } else {
+        // Текст длинный — редактируем первое сообщение заголовком, потом шлём части
+        await ctx.editMessageText(header + "📖 <i>Урок слишком большой, отправляю по частям...</i>", {
+          parse_mode: "HTML"
+        }).catch(() => {});
+
+        // Разбиваем aiExplanation на куски по 3800 символов
+        let remaining = aiExplanation;
+        while (remaining.length > 0) {
+          const chunk = remaining.slice(0, 3800);
+          remaining = remaining.slice(3800);
+          await ctx.reply(chunk, { parse_mode: "HTML" }).catch(() => {});
+        }
+
+        // Последнее сообщение с кнопками
+        await ctx.reply(footer, {
+          parse_mode: "HTML",
+          reply_markup: keyboard.reply_markup
+        }).catch(() => {});
+      }
 
     } catch (error) {
       console.error("❌ Ошибка при смене урока или генерации ИИ:", error.message);

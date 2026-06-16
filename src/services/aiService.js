@@ -77,7 +77,7 @@ async function generateContentWithRetry(options, retries = apiKeys.length || 4, 
       }
 
       const data = await response.json();
-      
+      console.log("🔍 [Groq RAW]:", JSON.stringify(data).slice(0, 500));
       // Парсим JSON строго по структуре эндпоинта /responses
       const messageOutput = data.output?.find(item => item.type === "message");
       const aiText = messageOutput?.content?.[0]?.type === "output_text"
