@@ -81,26 +81,34 @@ async function canRequest(id) {
   // Админ и Premium — безлимит
   if (id === 5037778442 || user.status !== 'free') return true;
 
-  // Проверка 5 дней с даты регистрации (created_at)
   const regDate = new Date(user.created_at);
   const now = new Date();
-  if ((now - regDate) / (1000 * 60 * 60 * 24) > 5) return false;
+  
+  // Вычисляем, сколько дней прошло с момента регистрации
+  const daysSinceRegistration = Math.floor((now - regDate) / (1000 * 60 * 60 * 24));
+  
+  // Логика: первые 5 дней — 10 запросов, после 5 дней — 4 запроса
+  const dailyLimit = daysSinceRegistration <= 5 ? 10 : 4;
 
-  // Проверка 5 запросов в день
+  // Проверка запросов за сегодня
   const today = now.toISOString().split('T')[0];
-  if (user.last_request_date?.toISOString().split('T')[0] !== today) return true;
-  return user.daily_requests < 5;
+  const lastRequestDate = user.last_request_date ? new Date(user.last_request_date).toISOString().split('T')[0] : null;
+
+  if (lastRequestDate !== today) return true; // Новый день — обнуляем счетчик
+  return user.daily_requests < dailyLimit;
 }
 
 async function incrementRequests(id) {
   const today = new Date().toISOString().split('T')[0];
-  await db.query(`
+  const result = await db.query(`
     UPDATE users 
     SET daily_requests = CASE WHEN last_request_date::date = $1::date THEN daily_requests + 1 ELSE 1 END,
         last_request_date = $1 
-    WHERE telegram_id = $2`, [today, id]);
+    WHERE telegram_id = $2
+    RETURNING daily_requests`, [today, id]);
+    
+  return result.rows[0].daily_requests;
 }
-
 
 async function updateUserLanguage(id, lang) {
   try {
