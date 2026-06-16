@@ -16,6 +16,7 @@ bot.use(session());
 
 // 🔥 ЗАЩИТА: Весь входящий трафик (кнопки, сообщения, команды) идет через этот фильтр
 bot.use(subscriptionGuard);
+const { getAllUsers, setUserStatus, canRequest, incrementRequests } = require('./services/userService');
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot);
@@ -52,6 +53,71 @@ bot.action('tz_group_asia', async (ctx) => {
   ])});
 });
 
+bot.action('adm_back', async (ctx) => {
+  // Вызываем ту же логику, что и в команде /admin
+  const users = await getAllUsers();
+  const buttons = users.map(u => [
+    Markup.button.callback(`${u.username || u.id} (${u.status})`, `adm_manage_${u.id}`)
+  ]);
+  
+  await ctx.editMessageText("👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>", {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.command('admin', async (ctx) => {
+  if (ctx.from.id !== 5037778442) return;
+
+  // Допустим, у тебя есть функция getAllUsers() в userService
+  const users = await getAllUsers(); // Возвращает массив [{id: 123, username: 'user1', status: 'premium'}, ...]
+  
+  const buttons = users.map(u => [
+    Markup.button.callback(`${u.username || u.id} (${u.status})`, `adm_manage_${u.id}`)
+  ]);
+  
+  await ctx.reply("👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>", {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^adm_manage_(\d+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  
+  await ctx.editMessageText(`Управление пользователем <b>${userId}</b>:`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Продлить Premium', `adm_prolong_${userId}`)],
+      [Markup.button.callback('❌ Отключить подписку', `adm_off_${userId}`)],
+      [Markup.button.callback('⬅️ Назад к списку', 'adm_back')]
+    ])
+  });
+});
+
+// Обработка продления
+bot.action(/^adm_prolong_(\d+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  await setUserStatus(userId, 'premium', 1); 
+  await ctx.answerCbQuery('Подписка продлена до Premium!');
+  // Обновляем сообщение, чтобы сразу видеть изменения статуса
+  await ctx.editMessageText(`Пользователь <b>${userId}</b> теперь имеет статус <b>Premium</b>!`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
+  });
+});
+
+// Обработка отключения
+bot.action(/^adm_off_(\d+)$/, async (ctx) => {
+  const userId = ctx.match[1];
+  await setUserStatus(userId, 'free', 0); 
+  await ctx.answerCbQuery('Подписка отключена!');
+  // Обновляем сообщение
+  await ctx.editMessageText(`Пользователь <b>${userId}</b> теперь имеет статус <b>Free</b>.`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад к списку', 'adm_back')]])
+  });
+});
 bot.action('tz_group_moscow', async (ctx) => {
   await ctx.editMessageText('📍 <b>Выбери регион:</b>', { parse_mode: 'HTML', ...Markup.inlineKeyboard([
       [Markup.button.callback('Москва (UTC+3)', 'set_tz_Europe/Moscow'), Markup.button.callback('Минск (UTC+3)', 'set_tz_Europe/Minsk')],
@@ -89,13 +155,29 @@ bot.action(/^set_tz_(.+)$/, async (ctx) => {
 // --- ОБРАБОТКА ТЕКСТА (ДОМАШКА) ---
 bot.on('text', async ctx => {
   if (!ctx.session.waitingForHomework) return;
+
+  // 🔥 ПРОВЕРКА ЛИМИТОВ (5 дней пробных или 5 запросов в день)
+  const allowed = await canRequest(ctx.from.id);
+  if (!allowed) {
+    return ctx.reply(
+      "⚠️ <b>Лимит исчерпан!</b>\n\n" +
+      "Бесплатный период закончился или ты превысил 5 запросов в день.\n" +
+      "Оформи Premium, чтобы учиться без ограничений!", 
+      { parse_mode: 'HTML' }
+    );
+  }
+
   const userHomework = ctx.message.text;
   const currentTopic = ctx.session.currentTopic || 'General English';
   ctx.session.waitingForHomework = false;
+  
   const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...');
+  
+  // Увеличиваем счетчик запросов в базе
+  await incrementRequests(ctx.from.id);
 
   try {
-    const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. Проверь текст студента: "${userHomework}". Тема: "${currentTopic}". Дай разбор с блоками: ❌ ОШИБКИ, 📝 ИДЕАЛЬНАЯ ВЕРСИЯ, 💡 ПОЧЕМУ ТАК?, 🚀 СЛЕНГ, 🎯 ЗАДАНИЕ, 🌟 СОВЕТ. Используй только HTML теги.`;
+    const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. Проверь текст: "${userHomework}". Тема: "${currentTopic}". Дай разбор: ❌ ОШИБКИ, 📝 ИДЕАЛЬНАЯ ВЕРСИЯ, 💡 ПОЧЕМУ ТАК?, 🚀 СЛЕНГ, 🎯 ЗАДАНИЕ, 🌟 СОВЕТ. Используй HTML.`;
     const response = await generateContentWithRetry({ model: 'gemini-2.0-flash', contents: prompt }, 3, 2500);
     
     await ctx.telegram.deleteMessage(ctx.chat.id, waitingMsg.message_id).catch(() => {});
@@ -103,6 +185,7 @@ bot.on('text', async ctx => {
       [Markup.button.callback('📖 Урок дня', 'action_today'), Markup.button.callback('⬅️ В меню', 'action_main_menu')]
     ]));
   } catch (error) {
+    console.error(error);
     await ctx.reply('⚠️ Ошибка ИИ. Попробуй позже.');
   }
 });

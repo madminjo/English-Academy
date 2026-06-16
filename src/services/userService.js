@@ -1,11 +1,12 @@
 const db = require("../config/db"); // Твой рабочий конфиг БД
 
 // 1. Создание нового пользователя при старте
+// В userService.js
 async function createUser(user) {
   await db.query(
     `
-    INSERT INTO users (telegram_id, username, first_name)
-    VALUES ($1, $2, $3)
+    INSERT INTO users (telegram_id, username, first_name, created_at)
+    VALUES ($1, $2, $3, NOW())
     ON CONFLICT (telegram_id) DO NOTHING
     `,
     [user.id, user.username || null, user.first_name || null]
@@ -62,6 +63,33 @@ async function isSubActive(id) {
   }
   return true;
 }
+// Добавь это в userService.js
+async function canRequest(id) {
+  const user = await getUser(id);
+  if (!user) return false;
+  
+  // Админ и Premium — безлимит
+  if (id === 5037778442 || user.status !== 'free') return true;
+
+  // Проверка 5 дней с даты регистрации (created_at)
+  const regDate = new Date(user.created_at);
+  const now = new Date();
+  if ((now - regDate) / (1000 * 60 * 60 * 24) > 5) return false;
+
+  // Проверка 5 запросов в день
+  const today = now.toISOString().split('T')[0];
+  if (user.last_request_date?.toISOString().split('T')[0] !== today) return true;
+  return user.daily_requests < 5;
+}
+
+async function incrementRequests(id) {
+  const today = new Date().toISOString().split('T')[0];
+  await db.query(`
+    UPDATE users 
+    SET daily_requests = CASE WHEN last_request_date::date = $1::date THEN daily_requests + 1 ELSE 1 END,
+        last_request_date = $1 
+    WHERE telegram_id = $2`, [today, id]);
+}
 
 module.exports = {
   createUser,
@@ -71,5 +99,7 @@ module.exports = {
   updateUserDay,
   updateWordsCount,
   setSubscription,
-  isSubActive
+  isSubActive,
+  canRequest,     // Добавь это
+  incrementRequests // Добавь это
 };
