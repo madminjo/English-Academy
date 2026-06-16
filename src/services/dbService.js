@@ -16,7 +16,7 @@ const pool = new Pool({
 
 module.exports = {
   query: (text, params) => {
-    // Логируем запрос для отладки, если что-то падает
+  
     return pool.query(text, params).catch(err => {
       console.error("DB Query Error:", err.message, "SQL:", text);
       throw err;
