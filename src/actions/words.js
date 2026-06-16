@@ -88,11 +88,17 @@ module.exports = (bot) => {
 
     try {
       const lines = wordsToSave.split("\n").filter(l => /^\d+\./.test(l));
-      const cleanWords = lines.map(line => ({
-        word: line.replace(/^\d+\.\s*/, "").split("—")[0].trim(),
-        translation: "",
-        transcription: ""
-      }));
+const cleanWords = lines.map(line => {
+  const withoutNum = line.replace(/^\d+\.\s*/, "");
+  const [wordPart, rest] = withoutNum.split("—").map(s => s.trim());
+  // rest может быть "Перевод (Транскрипция)" — разделяем
+  const transMatch = rest ? rest.match(/^(.*?)(?:\s*\(([^)]+)\))?$/) : null;
+  return {
+    word: wordPart || "",
+    translation: transMatch?.[1]?.trim() || "",
+    transcription: transMatch?.[2]?.trim() || ""
+  };
+});
 
       await wordService.saveUserVocabulary(ctx.from.id, cleanWords);
       await updateWordsCount(ctx.from.id, cleanWords.length);
