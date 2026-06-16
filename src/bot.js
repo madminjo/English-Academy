@@ -123,10 +123,8 @@ bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async (ctx) => {
   });
 });
 
-async function start() {
-  const result = await someFunction();
-}
-start();
+
+
 
 // Обработка отключения
 bot.action(/^adm_off_(\d+)$/, async (ctx) => {
