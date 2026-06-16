@@ -20,8 +20,10 @@ async function getUser(id) {
 }
 
 // 3. Получение всех (для рассылок)
+// В userService.js
 async function getAllUsers() {
-  const result = await db.query("SELECT telegram_id, first_name, current_day FROM users");
+  // Выбираем telegram_id (как id), username и status
+  const result = await db.query("SELECT telegram_id as id, username, status FROM users");
   return result.rows;
 }
 

@@ -56,9 +56,10 @@ bot.action('tz_group_asia', async (ctx) => {
 bot.action('adm_back', async (ctx) => {
   // Вызываем ту же логику, что и в команде /admin
   const users = await getAllUsers();
-  const buttons = users.map(u => [
-    Markup.button.callback(`${u.username || u.id} (${u.status})`, `adm_manage_${u.id}`)
-  ]);
+const buttons = users.map(u => [
+  // Если status пустой, подставим 'free'
+  Markup.button.callback(`${u.username || u.id} (${u.status || 'free'})`, `adm_manage_${u.id}`)
+]);
   
   await ctx.editMessageText("👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>", {
     parse_mode: 'HTML',
