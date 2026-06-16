@@ -3,6 +3,7 @@ const topics = require("../data/topics");
 const { getUserById, updateWordsCount } = require("../services/userService"); 
 const wordService = require("../services/wordService"); 
 const { generateContentWithRetry } = require("../services/aiService");
+const { sanitizeForTelegram } = require("../utils/textFormatter"); // Подключаем нашу утилиту
 
 const SYSTEM_INSTRUCTION = "Ты — харизматичный американский преподаватель английского языка по имени Майкл. Ты помогаешь студентам учить реальный разговорный американский английский (включая части тела, бытовые предметы, глаголы и актуальный уличный сленг).";
 
@@ -66,20 +67,13 @@ module.exports = (bot) => {
           config: { systemInstruction: SYSTEM_INSTRUCTION }
         }, 4, 3000); 
 
-        rawText = response.text;
+        if (!response || !response.text) {
+          throw new Error("Пустой ответ от ИИ");
+        }
+
+rawText = sanitizeForTelegram(response.text);
         
-        rawText = rawText
-          .replace(/^```html?\s*/i, "")
-          .replace(/```\s*$/, "")
-          .replace(/<\/?ul>/gi, "")
-          .replace(/<\/?ol>/gi, "")
-          .replace(/<li>/gi, "• ")
-          .replace(/<\/li>/gi, "\n");
-
-        // Предохранитель от звёздочек
-        rawText = rawText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-
-        // Сохраняем в кэш БД для последующих юзеров
+        // Сохраняем в кэш БД (уже очищенный текст)
         await wordService.saveWordsToCache(currentTopic, rawText);
       }
 
