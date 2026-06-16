@@ -34,10 +34,34 @@ const getLessonPrompt = (topicName, targetDay, lang) => {
 };
 
 async function sendSplitMessage(ctx, text, keyboard) {
-  const MAX_LENGTH = 4000;
-  const chunks = text.match(new RegExp(`.{1,${MAX_LENGTH}}(\n|$)`, 'gs')) || [text];
-  for (let i = 0; i < chunks.length; i++) {
-    await ctx.replyWithHTML(chunks[i], i === chunks.length - 1 ? keyboard : null);
+  const MAX_LENGTH = 3800;
+  const parts = [];
+  let remaining = text;
+  
+  while (remaining.length > 0) {
+    let chunk = remaining.slice(0, MAX_LENGTH);
+    // Ищем последний перенос строки чтобы не резать тег посередине
+    if (remaining.length > MAX_LENGTH) {
+      const lastNewline = chunk.lastIndexOf('\n');
+      if (lastNewline > MAX_LENGTH / 2) chunk = chunk.slice(0, lastNewline);
+    }
+    parts.push(chunk);
+    remaining = remaining.slice(chunk.length);
+  }
+
+  for (let i = 0; i < parts.length; i++) {
+    const isLast = i === parts.length - 1;
+    // Если тег не закрыт — шлём без parse_mode
+    try {
+      await ctx.reply(parts[i], {
+        parse_mode: 'HTML',
+        ...(isLast && keyboard ? { reply_markup: keyboard.reply_markup } : {})
+      });
+    } catch {
+      await ctx.reply(parts[i].replace(/<[^>]*>/g, ''), {
+        ...(isLast && keyboard ? { reply_markup: keyboard.reply_markup } : {})
+      });
+    }
   }
 }
 
@@ -70,9 +94,10 @@ module.exports = (bot) => {
     try {
       const cached = await db.query('SELECT lesson_text FROM generated_lessons WHERE day_number = $1 AND lang = $2', [currentDay, lang]);
       if (cached.rows?.length > 0) {
-  lessonText = cached.rows[0].lesson_text
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/?(?!b>|\/b>|i>|\/i>|code>|\/code>|u>|\/u>)[^>]+>/gi, '');
+lessonText = response.text
+  .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/?(?!b|\/b|i|\/i|code|\/code|u|\/u)([a-zA-Z][^>]*)>/gi, '');
 }
     } catch (dbErr) { console.error('Ошибка кэша:', dbErr.message); }
 
