@@ -12,25 +12,18 @@ module.exports = (bot) => {
     ctx.session.waitingForHomework = true;
     
     const lang = ctx.session.lang || 'en';
-    const topics = getTopicsByLang(lang);
-
+   const topicData = getTopicsByLang(lang);
     let topicName = (lang === 'de') ? "Übung des Tages" : "Общая практика";
     let currentDay = 1;
 
     try {
       const user = await getUserById(ctx.from.id);
-      if (user && user.current_day) {
-        currentDay = user.current_day;
-        // Используем метод поиска, который мы уже обсуждали
-        if (typeof topics.getTopicById === "function") {
-          topicName = topics.getTopicById(currentDay);
-        } else {
-          // Если структуры разные, ищем по объектам уровней
-          const allTopics = Object.values(topics).flat();
-          const found = allTopics.find(t => t.id === currentDay);
-          topicName = found?.title || topicName;
-        }
-      }
+if (user && user.current_day) {
+  currentDay = user.current_day;
+if (typeof topicData.getTopicById === "function") {
+  topicName = topicData.getTopicById(currentDay);
+}
+}
     } catch (dbError) {
       console.error("⚠️ Не удалось загрузить данные из БД:", dbError.message);
     }

@@ -124,12 +124,16 @@ const germanTopics = {
   ]
 };
 
-module.exports = germanTopics;
-
-module.exports.getTopicById = (id) => {
-  for (const level in germanTopics) {
-    const found = germanTopics[level].find(t => t.id === id);
+function getTopicById(id) {
+  for (const level of Object.values(germanTopics)) {
+    const found = level.find(t => t.id === id);
     if (found) return found.title;
   }
+
   return "General German Practice";
+}
+
+module.exports = {
+  topics: germanTopics,
+  getTopicById
 };
