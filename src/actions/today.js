@@ -79,7 +79,10 @@ module.exports = (bot) => {
           contents: getLessonPrompt(currentTopic, currentDay, lang),
         }, 4, 3000);
 
-        lessonText = response.text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        lessonText = response.text
+  .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/?(?!b>|\/b>|i>|\/i>|code>|\/code>|u>|\/u>)[^>]+>/gi, '');
         if (!response || !response.text) {
   throw new Error("Пустой ответ от ИИ");
 }
