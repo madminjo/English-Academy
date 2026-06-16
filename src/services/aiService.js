@@ -95,8 +95,15 @@ async function generateContentWithRetry(options, retries = apiKeys.length || 4, 
 
     } catch (error) {
       lastError = error;
-      const errorMsg = error.message || "";
-      
+   
+
+      console.error("❌ [Groq Error Debug]:", {
+    message: error.message,
+    status: error.status,
+    // Если ошибка сетевая, это поле поможет понять суть
+    cause: error.cause 
+  });
+         const errorMsg = error.message || "";
       // Проверяем, является ли ошибка лимитом (код 429 или текст RESOURCE_EXHAUSTED / quota)
       const isRateLimit = error.status === 429 || 
                           errorMsg.includes("429") || 
