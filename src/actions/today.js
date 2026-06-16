@@ -80,17 +80,22 @@ module.exports = (bot) => {
         }, 4, 3000);
 
         lessonText = response.text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+        if (!response || !response.text) {
+  throw new Error("Пустой ответ от ИИ");
+}
 
         await db.query(
           'INSERT INTO generated_lessons (day_number, topic_name, lesson_text, lang) VALUES ($1, $2, $3, $4) ON CONFLICT (day_number, lang) DO NOTHING',
           [currentDay, currentTopic, lessonText, lang]
         );
       } catch (error) {
+        console.error("DEBUG [today.js]:", error.message); // ДОБАВЬ ЭТО
         await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
         return ctx.reply('⚠️ Ошибка генерации. Попробуй позже, bro!');
       }
     }
 
+    
     await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
     
     const keyboard = Markup.inlineKeyboard([
