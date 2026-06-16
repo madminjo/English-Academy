@@ -69,7 +69,11 @@ module.exports = (bot) => {
     let lessonText = null;
     try {
       const cached = await db.query('SELECT lesson_text FROM generated_lessons WHERE day_number = $1 AND lang = $2', [currentDay, lang]);
-      if (cached.rows?.length > 0) lessonText = cached.rows[0].lesson_text;
+      if (cached.rows?.length > 0) {
+  lessonText = cached.rows[0].lesson_text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?(?!b>|\/b>|i>|\/i>|code>|\/code>|u>|\/u>)[^>]+>/gi, '');
+}
     } catch (dbErr) { console.error('Ошибка кэша:', dbErr.message); }
 
     if (!lessonText) {
