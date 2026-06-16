@@ -2,10 +2,13 @@ const { getUser } = require('../services/userService');
 const { Markup } = require('telegraf');
 
 module.exports = (bot) => {
-  // Функция для формирования профиля (чтобы не дублировать код)
   const getProfileMessage = async (ctx) => {
     const user = await getUser(ctx.from.id);
     if (!user) return null;
+
+    // Берем язык из сессии (если есть) или из базы
+    const lang = ctx.session.lang || user.lang || 'en';
+    const langDisplay = lang === 'de' ? '🇩🇪 Deutsch' : '🇬🇧 English';
 
     const statusDisplay = user.status === 'free' 
       ? '🆓 Free' 
@@ -21,29 +24,32 @@ module.exports = (bot) => {
 📈 <b>Уровень:</b> ${user.level}
 🔥 <b>Стрик:</b> ${user.streak} дней
 🧠 <b>Выучено слов:</b> ${user.words_learned}
+🌍 <b>Язык:</b> ${langDisplay}
 `;
   };
+
+  // Клавиатура профиля (вынесли отдельно, чтобы не дублировать)
+  const profileKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('🌍 Изменить язык', 'action_select_lang')],
+    [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
+  ]);
 
   // Обработка команды /profile
   bot.command('profile', async (ctx) => {
     const profileText = await getProfileMessage(ctx);
     if (!profileText) return ctx.reply("Сначала нажми /start!");
-    await ctx.replyWithHTML(profileText, Markup.inlineKeyboard([
-      [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
-    ]));
+    await ctx.replyWithHTML(profileText, profileKeyboard);
   });
 
-  // Обработка нажатия кнопки "👤 Профиль" (action_profile)
+  // Обработка кнопки "👤 Профиль"
   bot.action('action_profile', async (ctx) => {
-    await ctx.answerCbQuery(); // Убирает "Loading..."
+    await ctx.answerCbQuery(); 
     const profileText = await getProfileMessage(ctx);
     if (!profileText) return ctx.answerCbQuery("Сначала нажми /start!");
     
     await ctx.editMessageText(profileText, {
       parse_mode: 'HTML',
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
-      ])
+      ...profileKeyboard
     });
   });
 };

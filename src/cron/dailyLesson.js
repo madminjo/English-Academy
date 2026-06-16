@@ -52,6 +52,10 @@ module.exports = (bot) => {
       try {
         // 1. Извлекаем таймзону пользователя из БД (если нет — ставим дефолт Бишкек)
         const userTz = user.timezone || "Asia/Bishkek";
+        const userLang = user.lang || 'en'; // Получаем язык из БД (убедись, что поле lang есть у пользователя)
+const topicName = (userLang === 'de') 
+  ? require("../data/german_topics").getTopicById(user.current_day || 1) 
+  : topics.getTopicById(user.current_day || 1);
 
         // 2. Вычисляем, какой СЕЙЧАС час у этого конкретного юзера (формат от 0 до 23)
         userHour = parseInt(
@@ -69,8 +73,15 @@ module.exports = (bot) => {
           const topicName = topics.getTopicById(currentDay);
           const userName = user.first_name || "студент";
 
+          const isGerman = userLang === 'de';
+          const persona = isGerman 
+  ? "Ты — Майкл, харизматичный преподаватель немецкого языка, живущий в Берлине. Вайб: 'Alles klar?', 'Easy peasy!'." 
+  : "Ты — Майкл, харизматичный преподаватель американского английского, живущий в Лос-Анджелесе. Вайб: 'Hey bro!', 'Rise and shine, buddy!'.";
+
+const context = isGerman ? "Берлине и крутой столичной жизни" : "Лос-Анджелесе, калифорнийском солнце и серфинге";
+
           const prompt = `
-            Ты — харизматичный американский преподаватель английского языка по имени Майкл с 40-летним опытом.
+            ${persona}
             Ты виртуозно владеешь русским языком и используешь его, чтобы создавать живые, понятные утренние уроки.
             Сгенерируй для студента по имени ${userName} сочный, интересный утренний урок.
             
@@ -113,6 +124,7 @@ module.exports = (bot) => {
         // 🥪 СРАБОТАЛ БУДИЛЬНИК: 13:00 ДНЯ (Дневная напоминалка о ДЗ)
         else if (userHour === 13) {
           const topicName = topics.getTopicById(user.current_day || 1);
+          
           const lunchText = 
             "🥪 <b>ВРЕМЯ ОБЕДА ИЛИ КАК ТАМ ДЗ?</b>\n" +
             "───────────────────────\n" +

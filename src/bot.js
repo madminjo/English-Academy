@@ -187,28 +187,30 @@ bot.action(/^set_tz_(.+)$/, async (ctx) => {
 bot.on('text', async ctx => {
   if (!ctx.session.waitingForHomework) return;
 
-  // 🔥 ПРОВЕРКА ЛИМИТОВ (5 дней пробных или 5 запросов в день)
+  // 1. Проверка лимитов (у тебя уже есть)
   const allowed = await canRequest(ctx.from.id);
   if (!allowed) {
-    return ctx.reply(
-      "⚠️ <b>Лимит исчерпан!</b>\n\n" +
-      "Бесплатный период закончился или ты превысил 5 запросов в день.\n" +
-      "Оформи Premium, чтобы учиться без ограничений!", 
-      { parse_mode: 'HTML' }
-    );
+    return ctx.reply("⚠️ <b>Лимит исчерпан!</b>...", { parse_mode: 'HTML' });
   }
 
+  // 2. ОПРЕДЕЛЕНИЕ ЯЗЫКА (Берем из сессии или БД)
+  const lang = ctx.session.lang || 'en';
+  const langName = lang === 'de' ? 'Немецком' : 'Английском';
+  
   const userHomework = ctx.message.text;
-  const currentTopic = ctx.session.currentTopic || 'General English';
+  const currentTopic = ctx.session.currentTopic || (lang === 'de' ? 'Allgemeines Deutsch' : 'General English');
   ctx.session.waitingForHomework = false;
   
   const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...');
-  
-  // Увеличиваем счетчик запросов в базе
   await incrementRequests(ctx.from.id);
 
   try {
-    const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. Проверь текст: "${userHomework}". Тема: "${currentTopic}". Дай разбор: ❌ ОШИБКИ, 📝 ИДЕАЛЬНАЯ ВЕРСИЯ, 💡 ПОЧЕМУ ТАК?, 🚀 СЛЕНГ, 🎯 ЗАДАНИЕ, 🌟 СОВЕТ. Используй HTML.`;
+    // 3. ДИНАМИЧЕСКИЙ ПРОМПТ
+    const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. 
+    Проверь текст, написанный на ${langName}: "${userHomework}". 
+    Тема: "${currentTopic}". 
+    Дай разбор на ${langName} языке: ❌ ОШИБКИ, 📝 ИДЕАЛЬНАЯ ВЕРСИЯ, 💡 ПОЧЕМУ ТАК?, 🚀 СЛЕНГ, 🎯 ЗАДАНИЕ, 🌟 СОВЕТ. Используй HTML.`;
+    
     const response = await generateContentWithRetry({ model: 'gemini-2.0-flash', contents: prompt }, 3, 2500);
     
     await ctx.telegram.deleteMessage(ctx.chat.id, waitingMsg.message_id).catch(() => {});
@@ -255,6 +257,7 @@ bot.action('action_profile', async (ctx) => {
   await ctx.editMessageText(profileText, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
+      [Markup.button.callback('🌍 Изменить язык', 'action_select_lang')],
       [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
     ])
   });
@@ -264,6 +267,33 @@ bot.action('action_profile', async (ctx) => {
 bot.action('action_settings', async (ctx) => {
   await ctx.answerCbQuery().catch(() => {}); // Убираем "Loading..."
   await sendTimezoneMenu(ctx, true); // Используем твою готовую функцию
+});
+
+// 1. Показ выбора языка
+bot.action('action_select_lang', async (ctx) => {
+  await ctx.editMessageText('🌍 <b>Выбери язык обучения:</b>', {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('🇬🇧 Английский', 'set_lang_en')],
+      [Markup.button.callback('🇩🇪 Немецкий', 'set_lang_de')],
+      [Markup.button.callback('⬅️ Назад', 'action_profile')]
+    ])
+  });
+});
+
+// 2. Сохранение выбора в БД
+bot.action(/set_lang_(en|de)/, async (ctx) => {
+  const lang = ctx.match[1];
+  const { updateUserLanguage } = require('./services/userService');
+  
+  await updateUserLanguage(ctx.from.id, lang);
+  await ctx.answerCbQuery('Язык обновлен!');
+  
+  // Возвращаем в профиль с обновленным статусом
+  ctx.editMessageText(`✅ <b>Язык успешно изменен на ${lang === 'de' ? 'Немецкий' : 'Английский'}!</b>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ В профиль', 'action_profile')]])
+  });
 });
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---

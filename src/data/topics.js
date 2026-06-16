@@ -82,37 +82,48 @@ const topics = {
     { id: 71, title: "Gerunds vs Infinitives" },
     { id: 72, title: "Meaning Change: Stop doing/to do" }
   ],
-  "C2 - Proficiency": [
+  "C2 - Proficiency & Life Skills": [
     { id: 73, title: "Relative Clauses: Who/Which/That" },
     { id: 74, title: "Relative Clauses: Whose/Where" },
     { id: 75, title: "Linking Words: Basic" },
     { id: 76, title: "Linking Words: Advanced" },
     { id: 77, title: "Linking Words: Professional" },
-    { id: 78, title: "Phrasal Verbs: Daily" },
-    { id: 79, title: "Phrasal Verbs: Discovery" },
-    { id: 80, title: "Phrasal Verbs: Electronics" },
-    { id: 81, title: "Phrasal Verbs: Decisions" },
-    { id: 82, title: "Phrasal Verbs: Movement" },
+    { id: 78, title: "Phrasal Verbs: Daily Life" },
+    { id: 79, title: "Phrasal Verbs: Travel & Exploration" },
+    { id: 80, title: "Phrasal Verbs: Shopping & Services" },
+    { id: 81, title: "Phrasal Verbs: Making Decisions" },
+    { id: 82, title: "Phrasal Verbs: Physical Movement" },
     { id: 83, title: "Advanced: Used To / Would" },
     { id: 84, title: "Advanced: Be/Get Used To" },
-    { id: 85, title: "Advanced: Question Tags" },
-    { id: 86, title: "Advanced: Causative Have/Get" },
-    { id: 87, title: "Advanced: Inversion structures" },
+    { id: 85, title: "Advanced: Question Tags for Conversation" },
+    { id: 86, title: "Advanced: Causative Have/Get (Services)" },
+    { id: 87, title: "Advanced: Inversion for Emphasis" },
     { id: 88, title: "Advanced: Participle Clauses" },
     { id: 89, title: "Advanced: Cleft Sentences" },
     { id: 90, title: "Advanced: Nominalisation & Ellipsis" },
     { id: 91, title: "Advanced: C2 Discourse Markers" }
+  ],
+  "🌍 Real Life & Modern World (2026)": [
+    { id: 92, title: "Travel: Handling emergencies and unexpected situations" },
+    { id: 93, title: "Daily Life: Discussing global news and current events" },
+    { id: 94, title: "Socializing: Small talk and building friendships" },
+    { id: 95, title: "Shopping & Consumer Rights: Returning goods & complaining" },
+    { id: 96, title: "Health & Well-being: Talking to doctors and explaining symptoms" },
+    { id: 97, title: "Education & Self-Development: Discussing personal goals" },
+    { id: 98, title: "Environment & Society: Expressing opinions on global issues" },
+    { id: 99, title: "Digital Literacy: Understanding media and avoiding misinformation" },
+    { id: 100, title: "Culture & Lifestyle: Telling stories about experiences" },
+    { id: 101, title: "Problem Solving: Asking for help and explaining needs" },
+    { id: 102, title: "Global Mindset: Adapting to different cultures" }
   ]
 };
 
-// Экспортируем сам объект с темами
 module.exports = topics;
 
-// Экспортируем функцию быстрого поиска темы по ID (нужно для Крона)
 module.exports.getTopicById = (id) => {
   for (const level in topics) {
     const found = topics[level].find(t => t.id === id);
     if (found) return found.title;
   }
-  return "Свободная разговорная практика (Уровень C2)";
+  return "General English Practice";
 };

@@ -93,6 +93,16 @@ async function incrementRequests(id) {
     WHERE telegram_id = $2`, [today, id]);
 }
 
+
+async function updateUserLanguage(id, lang) {
+  await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
+}
+
+async function getUserLanguage(id) {
+  const user = await getUser(id);
+  return user ? user.lang : 'en'; // По умолчанию английский
+}
+
 module.exports = {
   createUser,
   getUser,
@@ -102,6 +112,8 @@ module.exports = {
   updateWordsCount,
   setSubscription,
   isSubActive,
-  canRequest,     // Добавь это
-  incrementRequests // Добавь это
+  canRequest,  
+  incrementRequests,
+  updateUserLanguage,
+  getUserLanguage
 };

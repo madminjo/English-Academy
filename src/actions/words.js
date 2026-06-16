@@ -1,64 +1,66 @@
+
 const { Markup } = require("telegraf");
-const topics = require("../data/topics");
 const { getUserById, updateWordsCount } = require("../services/userService");
 const wordService = require("../services/wordService");
 const { generateContentWithRetry } = require("../services/aiService");
 const { sanitizeForTelegram } = require("../utils/textFormatter");
 
-const SYSTEM_INSTRUCTION = "Ты — харизматичный американский преподаватель английского языка по имени Майкл. Ты помогаешь студентам учить реальный разговорный американский английский.";
-
-const getPromptText = (topic) => {
-  return `Ты — Майкл. Составь список из 30 самых важных слов по теме: "${topic}".
+// Функция генерации промпта в зависимости от языка
+const getPromptText = (topic, lang) => {
+  const isGerman = lang === 'de';
+  const header = isGerman ? "📊 DEUTSCHER WORT-SCHATZ (30 wichtige Wörter):" : "📊 АМЕРИКАНСКИЙ СЛОВАРЬ (30 самых важных слов):";
+  
+  return `Ты — Майкл, преподаватель ${isGerman ? "немецкого" : "американского английского"}. Составь список из 30 самых важных слов по теме: "${topic}".
   Формат: 
   1. Слово — Перевод (Транскрипция)
-  Майкл: Комментарий
-  Заголовок: 📊 АМЕРИКАНСКИЙ СЛОВАРЬ (30 самых важных слов):`;
+  Майкл: Комментарий на русском языке.
+  Заголовок: ${header}`;
 };
 
 module.exports = (bot) => {
-  // Обработчик для обоих случаев: просто слова и принудительное обновление
   bot.action(/^action_words(:force)?$/, async (ctx) => {
-    const isForceUpdate = ctx.match[1] === ':force'; // Проверяем, есть ли флаг обновления
+    const isForceUpdate = ctx.match[1] === ':force';
     await ctx.answerCbQuery().catch(() => {});
     
     if (!ctx.session) ctx.session = {};
-    let currentTopic = ctx.session.currentTopic || "Daily American English";
+    const lang = ctx.session.lang || 'en';
+    let currentTopic = ctx.session.currentTopic || (lang === 'de' ? "Deutsch lernen" : "Daily American English");
     let currentDay = ctx.session.currentDay || 1;
 
-    const statusMsg = await ctx.reply("⏳ <b>Майкл собирает пак...</b>", { parse_mode: "HTML" });
+    const statusMsg = await ctx.reply("⏳ <b>Майкл собирает пак слов...</b>", { parse_mode: "HTML" });
 
     try {
       let rawText = "";
-      // Если force — пропускаем кэш
-      const cachedWords = isForceUpdate ? null : await wordService.getWordsByTopic(currentTopic);
+      // Кэшируем по топику + языку
+      const cacheKey = `${lang}_${currentTopic}`;
+      const cachedWords = isForceUpdate ? null : await wordService.getWordsByTopic(cacheKey);
 
       if (cachedWords) {
         rawText = cachedWords;
       } else {
         const response = await generateContentWithRetry({
           model: "gemini-2.0-flash",
-          contents: getPromptText(currentTopic),
-          config: { systemInstruction: SYSTEM_INSTRUCTION }
+          contents: getPromptText(currentTopic, lang),
         }, 4, 3000);
 
         if (!response?.text) throw new Error("Пустой ответ от ИИ");
         
         rawText = sanitizeForTelegram(response.text);
-        await wordService.saveWordsToCache(currentTopic, rawText);
+        await wordService.saveWordsToCache(cacheKey, rawText);
       }
 
       ctx.session.generatedWords = rawText;
 
+      const title = (lang === 'de') ? "MEGA WORT-PAKET" : "MEGA VOCABULARY PACK";
       const finalMessage = 
-        "🇺🇸 <b>MEGA VOCABULARY PACK</b>\n" +
-        "───────────────────────\n" +
-        "🎯 <b>Тема:</b> <code>День " + currentDay + " — " + currentTopic + "</code>\n" +
-        "───────────────────────\n\n" +
-        rawText + "\n\n" +
-        "───────────────────────\n" +
-        "💡 <i>Выбери действие:</i>";
+        `🎓 <b>${title}</b>\n` +
+        `───────────────────────\n` +
+        `🎯 <b>Тема:</b> <code>День ${currentDay} — ${currentTopic}</code>\n` +
+        `───────────────────────\n\n` +
+        rawText + `\n\n` +
+        `───────────────────────\n` +
+        `💡 <i>Выбери действие:</i>`;
 
-      // Добавили кнопку "🔄 Обновить"
       const keyboard = Markup.inlineKeyboard([
         [
             Markup.button.callback("📥 Сохранить", "action_save_words"), 
@@ -78,7 +80,9 @@ module.exports = (bot) => {
     }
   });
 
-  bot.action("action_save_words", async (ctx) => {
+  // Остальные обработчики (action_save_words, action_cancel_words) 
+  // работают без изменений, так как они просто сохраняют то, что в сессии.
+    bot.action("action_save_words", async (ctx) => {
     const wordsToSave = ctx.session.generatedWords;
     if (!wordsToSave) return ctx.answerCbQuery("⚠️ Данные устарели!", { show_alert: true });
 

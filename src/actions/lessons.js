@@ -1,12 +1,31 @@
 const { Markup } = require("telegraf");
-const topics = require("../data/topics");
+
 const { getUserById, updateUserDay } = require("../services/userService");
 // Импортируем наш метод пула аккаунтов вместо прямого подключения GoogleGenAI
 const { generateContentWithRetry } = require("../services/aiService");
 const { sanitizeForTelegram } = require("../utils/textFormatter");
 
+
 module.exports = (bot) => {
   
+  function getLangSettings(ctx) {
+    const lang = ctx.session.lang || 'en';
+    const topics = (lang === 'de') ? require("../data/german_topics") : require("../data/topics");
+    const config = {
+      en: {
+        persona: "Ты — Майкл, харизматичный преподаватель американского английского, который живет в Лос-Анджелесе. Твой стиль: дружеский вайб (используй 'Hey bro!', 'Easy peasy!'), ты общаешься живо, понятно и очень подробно.",
+        context: "Лос-Анджелесе, калифорнийском солнце и серфинге",
+        explainLang: "русском языке" 
+      },
+      de: {
+        persona: "Ты — Майкл, харизматичный преподаватель немецкого языка, который живет в Берлине. Твой стиль: дружеский вайб (используй 'Hey bro!', 'Alles klar?', 'Easy peasy!'), ты общаешься живо, понятно и очень подробно.",
+        context: "Берлине, местной культуре и крутой столичной жизни",
+        explainLang: "немецком языке"
+      }
+    };
+    return { lang, topics, settings: config[lang] };
+  }
+
   // 1. НАЖАТИЕ НА "🎯 ВЫБОР УРОВНЯ"
   bot.action("action_lessons", async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
@@ -32,6 +51,7 @@ module.exports = (bot) => {
   bot.action(/^select_day_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery().catch(() => {});
     const targetDay = parseInt(ctx.match[1], 10);
+    const { topics, settings, lang } = getLangSettings(ctx);
     
     // Безопасный поиск названия темы по ID из структуры уровней
     let topicName = "Выбранный урок";
@@ -58,7 +78,7 @@ module.exports = (bot) => {
 
       // 2. Формируем запрос к Gemini
 const prompt = `
-Ты — Майкл, харизматичный преподаватель американского английского. Твой стиль: дружеский вайб ("Hey bro!", "Easy peasy!"), ты общаешься живо, понятно и очень подробно.
+${settings.persona}
 
 Твоя задача — сделать МЕГА-РАЗБОР темы для студента.
 Тема: "День ${targetDay} — ${topicName}"
@@ -133,6 +153,7 @@ const prompt = `
 
   // 3. ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ РЕНДЕРА СПИСКА УРОКОВ
   async function renderLessonsList(ctx, targetLevel) {
+    const { topics, lang } = getLangSettings(ctx);
     let userDay = 1;
     try {
       const user = await getUserById(ctx.from.id);
