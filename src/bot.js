@@ -221,6 +221,43 @@ bot.on('text', async ctx => {
   }
 });
 
+bot.action('action_profile', async (ctx) => {
+  // Вызываем обработку команды /profile вручную
+  // Для этого убедись, что твоя команда /profile экспортирует функцию, 
+  // которую можно вызвать, либо просто продублируй вызов функции getUser здесь.
+  
+  // Самый простой способ — имитировать команду /profile:
+  // (Предполагается, что у тебя в index.js функция команды вынесена в отдельную логику)
+  
+  // Если не хочешь переделывать команды, просто скопируй логику из profile.js сюда:
+  const { getUser } = require('../services/userService');
+  const user = await getUser(ctx.from.id);
+  
+  if (!user) return ctx.answerCbQuery("Сначала нажми /start!");
+
+  const statusDisplay = user.status === 'free' ? '🆓 Free' : `💎 Premium (${user.status.toUpperCase()})`;
+
+  const profileText = `
+👤 <b>Твой профиль:</b>
+───────────────────────
+🆔 <b>ID:</b> ${user.telegram_id}
+📛 <b>Имя:</b> ${user.first_name || '—'}
+👑 <b>Статус:</b> ${statusDisplay}
+📅 <b>Подписка до:</b> ${user.sub_end_date ? new Date(user.sub_end_date).toLocaleDateString() : '—'}
+📈 <b>Уровень:</b> ${user.level}
+🔥 <b>Стрик:</b> ${user.streak} дней
+🧠 <b>Выучено слов:</b> ${user.words_learned}
+`;
+
+  await ctx.answerCbQuery(); // Закрываем "часики" у кнопки
+  await ctx.editMessageText(profileText, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.callback('⬅️ В меню', 'action_main_menu')]
+    ])
+  });
+});
+
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
   if (text.length <= 4000) return ctx.replyWithHTML(text, keyboard);
