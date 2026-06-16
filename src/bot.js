@@ -16,7 +16,7 @@ bot.use(session());
 
 // 🔥 ЗАЩИТА: Весь входящий трафик (кнопки, сообщения, команды) идет через этот фильтр
 bot.use(subscriptionGuard);
-const { getAllUsers, setUserStatus, canRequest, incrementRequests } = require('./services/userService');
+const { getAllUsers, setUserStatus, canRequest, incrementRequests, getUser } = require('./services/userService');
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot);
