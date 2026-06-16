@@ -283,17 +283,25 @@ bot.action('action_select_lang', async (ctx) => {
 
 // 2. Сохранение выбора в БД
 bot.action(/set_lang_(en|de)/, async (ctx) => {
+  // 1. Обязательная инициализация сессии (защита от падения)
+  ctx.session = ctx.session || {};
+  
   const lang = ctx.match[1];
   const { updateUserLanguage } = require('./services/userService');
   
+  // 2. Обновляем БД
   await updateUserLanguage(ctx.from.id, lang);
+  
+  // 3. ОБЯЗАТЕЛЬНО обновляем сессию для корректной работы других частей бота
+  ctx.session.lang = lang;
+  
   await ctx.answerCbQuery('Язык обновлен!');
   
-  // Возвращаем в профиль с обновленным статусом
-  ctx.editMessageText(`✅ <b>Язык успешно изменен на ${lang === 'de' ? 'Немецкий' : 'Английский'}!</b>`, {
+  // 4. Безопасное обновление сообщения
+  await ctx.editMessageText(`✅ <b>Язык успешно изменен на ${lang === 'de' ? 'Немецкий' : 'Английский'}!</b>`, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ В профиль', 'action_profile')]])
-  });
+  }).catch(err => console.error("Ошибка при обновлении сообщения:", err));
 });
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
