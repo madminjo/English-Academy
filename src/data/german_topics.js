@@ -1,5 +1,4 @@
 // src/data/german_topics.js
-
 const germanTopics = {
   "A1 - Starter": [
     { id: 1001, title: "Алфавит, произношение, умляуты" },
