@@ -1,166 +1,194 @@
-const db = require("../config/db"); // Твой рабочий конфиг БД
+const db = require('../config/db') // Твой рабочий конфиг БД
 
 // 1. Создание нового пользователя при старте
 // В userService.js
 async function createUser(user) {
-  await db.query(
-    `
+	await db.query(
+		`
     INSERT INTO users (telegram_id, username, first_name, created_at)
     VALUES ($1, $2, $3, NOW())
     ON CONFLICT (telegram_id) DO NOTHING
     `,
-    [user.id, user.username || null, user.first_name || null]
-  );
+		[user.id, user.username || null, user.first_name || null],
+	)
 }
 
 // 2. Получение пользователя
 async function getUser(id) {
-  const result = await db.query("SELECT * FROM users WHERE telegram_id = $1", [id]);
-  return result.rows[0];
+	const result = await db.query('SELECT * FROM users WHERE telegram_id = $1', [
+		id,
+	])
+	return result.rows[0]
 }
 
 // 3. Получение всех (для рассылок)
 // В userService.js
 async function getAllUsers() {
-  // Выбираем telegram_id (как id), username и status
-  const result = await db.query("SELECT telegram_id as id, username, status FROM users");
-  return result.rows;
+	// Выбираем telegram_id (как id), username и status
+	const result = await db.query(
+		'SELECT telegram_id as id, username, status FROM users',
+	)
+	return result.rows
 }
 
 // 4. Обновление дня обучения
 async function updateUserDay(id, newDay) {
-  await db.query("UPDATE users SET current_day = $1 WHERE telegram_id = $2", [newDay, id]);
+	await db.query('UPDATE users SET current_day = $1 WHERE telegram_id = $2', [
+		newDay,
+		id,
+	])
 }
 
 // 5. Счетчик слов
 async function updateWordsCount(id, count) {
-  await db.query("UPDATE users SET words_learned = words_learned + $1 WHERE telegram_id = $2", [count, id]);
+	await db.query(
+		'UPDATE users SET words_learned = words_learned + $1 WHERE telegram_id = $2',
+		[count, id],
+	)
 }
 
 // 6. 🔥 Установка подписки (mo1, mo3, mo6, mo12)
 async function setSubscription(id, status) {
-  const now = new Date();
-  let endDate = new Date();
+	const now = new Date()
+	let endDate = new Date()
 
-  if (status === 'mo1') endDate.setMonth(now.getMonth() + 1);
-  else if (status === 'mo3') endDate.setMonth(now.getMonth() + 3);
-  else if (status === 'mo6') endDate.setMonth(now.getMonth() + 6);
-  else if (status === 'mo12') endDate.setFullYear(now.getFullYear() + 1);
-  else endDate = null; // для 'free'
+	if (status === 'mo1') endDate.setMonth(now.getMonth() + 1)
+	else if (status === 'mo3') endDate.setMonth(now.getMonth() + 3)
+	else if (status === 'mo6') endDate.setMonth(now.getMonth() + 6)
+	else if (status === 'mo12') endDate.setFullYear(now.getFullYear() + 1)
+	else endDate = null // для 'free'
 
-  await db.query(
-    `UPDATE users SET status = $1, sub_end_date = $2 WHERE telegram_id = $3`,
-    [status, endDate, id]
-  );
+	await db.query(
+		`UPDATE users SET status = $1, sub_end_date = $2 WHERE telegram_id = $3`,
+		[status, endDate, id],
+	)
 }
 
 async function revokeSubscription(id) {
-  await db.query(
-    "UPDATE users SET status = 'free', sub_end_date = NULL WHERE telegram_id = $1",
-    [id]
-  );
+	await db.query(
+		"UPDATE users SET status = 'free', sub_end_date = NULL WHERE telegram_id = $1",
+		[id],
+	)
 }
 
 // 2. Принудительная выдача подписки (на произвольный срок или навсегда)
 async function grantSubscription(id, status, days = 30) {
-  const endDate = new Date();
-  endDate.setDate(endDate.getDate() + days);
-  
-  await db.query(
-    "UPDATE users SET status = $1, sub_end_date = $2 WHERE telegram_id = $3",
-    [status, endDate, id]
-  );
+	const endDate = new Date()
+	endDate.setDate(endDate.getDate() + days)
+
+	await db.query(
+		'UPDATE users SET status = $1, sub_end_date = $2 WHERE telegram_id = $3',
+		[status, endDate, id],
+	)
 }
 
 // 7. 🔥 Проверка статуса (автоматически скидывает в 'free', если время вышло)
 async function isSubActive(id) {
-  // Атомарный запрос: проверяем и обновляем одним махом
-  // 1. Сбрасываем статус, если время истекло
-  await db.query(`
+	// Атомарный запрос: проверяем и обновляем одним махом
+	// 1. Сбрасываем статус, если время истекло
+	await db.query(
+		`
     UPDATE users 
     SET status = 'free', sub_end_date = NULL 
     WHERE telegram_id = $1 
     AND status != 'free' 
     AND sub_end_date IS NOT NULL 
     AND sub_end_date < NOW()
-  `, [id]);
+  `,
+		[id],
+	)
 
-  // 2. Получаем актуальный статус пользователя
-  const user = await getUser(id);
-  
-  // Возвращаем true только если статус не 'free'
-  return user && user.status !== 'free';
+	// 2. Получаем актуальный статус пользователя
+	const user = await getUser(id)
+
+	// Возвращаем true только если статус не 'free'
+	return user && user.status !== 'free'
 }
 // Добавь это в userService.js
 async function canRequest(id) {
-  const user = await getUser(id);
-  if (!user) return false;
-  
-  // Админ и Premium — безлимит
-  if (id === 5037778442 || user.status !== 'free') return true;
+	const user = await getUser(id)
+	if (!user) return false
 
-  const regDate = new Date(user.created_at);
-  const now = new Date();
-  
-  // Вычисляем, сколько дней прошло с момента регистрации
-  const daysSinceRegistration = Math.floor((now - regDate) / (1000 * 60 * 60 * 24));
-  
-  // Логика: первые 5 дней — 10 запросов, после 5 дней — 4 запроса
-  const dailyLimit = daysSinceRegistration <= 5 ? 10 : 4;
+	// Админ и Premium — безлимит
+	if (id === 5037778442 || user.status !== 'free') return true
 
-  // Проверка запросов за сегодня
-  const today = now.toISOString().split('T')[0];
-  const lastRequestDate = user.last_request_date ? new Date(user.last_request_date).toISOString().split('T')[0] : null;
+	const regDate = new Date(user.created_at)
+	const now = new Date()
 
-  if (lastRequestDate !== today) return true; // Новый день — обнуляем счетчик
-  return user.daily_requests < dailyLimit;
+	// Вычисляем, сколько дней прошло с момента регистрации
+	const daysSinceRegistration = Math.floor(
+		(now - regDate) / (1000 * 60 * 60 * 24),
+	)
+
+	// Логика: первые 5 дней — 10 запросов, после 5 дней — 4 запроса
+	const dailyLimit = daysSinceRegistration <= 5 ? 10 : 4
+
+	// Проверка запросов за сегодня
+	const today = now.toISOString().split('T')[0]
+	const lastRequestDate = user.last_request_date
+		? new Date(user.last_request_date).toISOString().split('T')[0]
+		: null
+
+	if (lastRequestDate !== today) return true // Новый день — обнуляем счетчик
+	return user.daily_requests < dailyLimit
 }
 
 async function incrementRequests(id) {
-  const today = new Date().toISOString().split('T')[0];
-  const result = await db.query(`
+	const today = new Date().toISOString().split('T')[0]
+	const result = await db.query(
+		`
     UPDATE users 
     SET daily_requests = CASE WHEN last_request_date::date = $1::date THEN daily_requests + 1 ELSE 1 END,
         last_request_date = $1 
     WHERE telegram_id = $2
-    RETURNING daily_requests`, [today, id]);
-    
-  return result.rows[0].daily_requests;
+    RETURNING daily_requests`,
+		[today, id],
+	)
+
+	return result.rows[0].daily_requests
 }
 
 async function updateUserLanguage(id, lang) {
-  try {
-    await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
-  } catch (error) {
-    // Код ошибки 42703 означает "column does not exist"
-    if (error.code === '42703') {
-      console.log("⚠️ Колонка 'lang' не найдена, создаю...");
-      await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS lang VARCHAR(2) DEFAULT 'en'");
-      // Повторяем попытку после создания
-      await db.query("UPDATE users SET lang = $1 WHERE telegram_id = $2", [lang, id]);
-    } else {
-      throw error;
-    }
-  }
+	try {
+		await db.query('UPDATE users SET lang = $1 WHERE telegram_id = $2', [
+			lang,
+			id,
+		])
+	} catch (error) {
+		// Код ошибки 42703 означает "column does not exist"
+		if (error.code === '42703') {
+			console.log("⚠️ Колонка 'lang' не найдена, создаю...")
+			await db.query(
+				"ALTER TABLE users ADD COLUMN IF NOT EXISTS lang VARCHAR(2) DEFAULT 'en'",
+			)
+			// Повторяем попытку после создания
+			await db.query('UPDATE users SET lang = $1 WHERE telegram_id = $2', [
+				lang,
+				id,
+			])
+		} else {
+			throw error
+		}
+	}
 }
 async function getUserLanguage(id) {
-  const user = await getUser(id);
-  return user ? user.lang : 'en'; // По умолчанию английский
+	const user = await getUser(id)
+	return user ? user.lang : 'en' // По умолчанию английский
 }
 
 module.exports = {
-  createUser,
-  getUser,
-  getUserById: getUser,
-  getAllUsers,
-  updateUserDay,
-  updateWordsCount,
-  setSubscription,
-  revokeSubscription, 
-  grantSubscription,  
-  isSubActive,
-  canRequest,  
-  incrementRequests,
-  updateUserLanguage,
-  getUserLanguage
-};
+	createUser,
+	getUser,
+	getUserById: getUser,
+	getAllUsers,
+	updateUserDay,
+	updateWordsCount,
+	setSubscription,
+	revokeSubscription,
+	grantSubscription,
+	isSubActive,
+	canRequest,
+	incrementRequests,
+	updateUserLanguage,
+	getUserLanguage,
+}
