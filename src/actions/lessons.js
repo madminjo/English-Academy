@@ -7,11 +7,13 @@ const { sanitizeForTelegram } = require('../utils/textFormatter')
 
 module.exports = bot => {
 	function getLangSettings(ctx) {
-		const lang = ctx.session.lang || 'en'
-		const topics =
-			lang === 'de'
-				? require('../data/german_topics')
-				: require('../data/topics')
+	const lang = ctx.session.lang || 'en'
+
+	const data =
+		lang === 'de'
+			? require('../data/german_topics')
+			: require('../data/topics')
+
 		const config = {
 			en: {
 				persona:
@@ -26,8 +28,14 @@ module.exports = bot => {
 				explainLang: 'немецком языке',
 			},
 		}
-		return { lang, topics, settings: config[lang] }
+
+	return {
+		lang,
+		topics: data.topics,
+		getTopicById: data.getTopicById,
+		settings: config[lang],
 	}
+}
 
 	// 1. НАЖАТИЕ НА "🎯 ВЫБОР УРОВНЯ"
 	bot.action('action_lessons', async ctx => {
@@ -67,13 +75,13 @@ module.exports = bot => {
 	bot.action(/^select_day_(\d+)$/, async ctx => {
 		await ctx.answerCbQuery().catch(() => {})
 		const targetDay = parseInt(ctx.match[1], 10)
-		const { topics, settings, lang } = getLangSettings(ctx)
+		const { topics, getTopicById, settings, lang } = getLangSettings(ctx)
 
 		// Безопасный поиск названия темы по ID из структуры уровней
 		let topicName = 'Выбранный урок'
-		if (typeof topics.getTopicById === 'function') {
-			topicName = topics.getTopicById(targetDay)
-		} else {
+if (typeof getTopicById === 'function') {
+	topicName = getTopicById(targetDay)
+} else {
 			for (const level in topics) {
 				if (Array.isArray(topics[level])) {
 					const found = topics[level].find(t => t && t.id === targetDay)

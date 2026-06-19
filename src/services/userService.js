@@ -1,7 +1,29 @@
 const db = require('../config/db') // Твой рабочий конфиг БД
 
+const ADMIN_ID = 5037778442
+
+// Гарантируем наличие всех нужных колонок при старте (без миграций руками)
+async function ensureSchema() {
+	const columns = [
+		{ name: 'daily_requests', ddl: 'INTEGER DEFAULT 0' },
+		{ name: 'last_request_date', ddl: 'DATE' },
+		{ name: 'daily_lessons', ddl: 'INTEGER DEFAULT 0' },
+		{ name: 'last_lesson_date', ddl: 'DATE' },
+	]
+
+	for (const col of columns) {
+		try {
+			await db.query(
+				`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col.name} ${col.ddl}`,
+			)
+		} catch (error) {
+			console.error(`⚠️ Не удалось проверить/создать колонку ${col.name}:`, error.message)
+		}
+	}
+	console.log('✅ Схема users проверена (лимиты ИИ и уроков)')
+}
+
 // 1. Создание нового пользователя при старте
-// В userService.js
 async function createUser(user) {
 	await db.query(
 		`
@@ -22,11 +44,9 @@ async function getUser(id) {
 }
 
 // 3. Получение всех (для рассылок)
-// В userService.js
 async function getAllUsers() {
-	// Выбираем telegram_id (как id), username и status
 	const result = await db.query(
-		'SELECT telegram_id as id, username, status FROM users',
+		'SELECT telegram_id as id, username, status FROM users WHERE telegram_id IS NOT NULL',
 	)
 	return result.rows
 }
@@ -71,7 +91,7 @@ async function revokeSubscription(id) {
 	)
 }
 
-// 2. Принудительная выдача подписки (на произвольный срок или навсегда)
+// Принудительная выдача подписки (на произвольный срок)
 async function grantSubscription(id, status, days = 30) {
 	const endDate = new Date()
 	endDate.setDate(endDate.getDate() + days)
@@ -84,8 +104,6 @@ async function grantSubscription(id, status, days = 30) {
 
 // 7. 🔥 Проверка статуса (автоматически скидывает в 'free', если время вышло)
 async function isSubActive(id) {
-	// Атомарный запрос: проверяем и обновляем одним махом
-	// 1. Сбрасываем статус, если время истекло
 	await db.query(
 		`
     UPDATE users 
@@ -98,38 +116,37 @@ async function isSubActive(id) {
 		[id],
 	)
 
-	// 2. Получаем актуальный статус пользователя
 	const user = await getUser(id)
-
-	// Возвращаем true только если статус не 'free'
 	return user && user.status !== 'free'
 }
-// Добавь это в userService.js
+
+// Сколько дней прошло с регистрации
+function daysSinceRegistration(user) {
+	const regDate = new Date(user.created_at)
+	const now = new Date()
+	return Math.floor((now - regDate) / (1000 * 60 * 60 * 24))
+}
+
+// Является ли юзер привилегированным (админ или активная подписка)
+function isPrivileged(id, user) {
+	return id === ADMIN_ID || (user && user.status !== 'free')
+}
+
+// ===================== ЛИМИТ ЗАПРОСОВ К ИИ =====================
+// Триал (дни 0-5): 10 запросов/день. После: 5 запросов/день.
 async function canRequest(id) {
 	const user = await getUser(id)
 	if (!user) return false
+	if (isPrivileged(id, user)) return true
 
-	// Админ и Premium — безлимит
-	if (id === 5037778442 || user.status !== 'free') return true
+	const dailyLimit = daysSinceRegistration(user) <= 5 ? 10 : 5
 
-	const regDate = new Date(user.created_at)
-	const now = new Date()
-
-	// Вычисляем, сколько дней прошло с момента регистрации
-	const daysSinceRegistration = Math.floor(
-		(now - regDate) / (1000 * 60 * 60 * 24),
-	)
-
-	// Логика: первые 5 дней — 10 запросов, после 5 дней — 4 запроса
-	const dailyLimit = daysSinceRegistration <= 5 ? 10 : 4
-
-	// Проверка запросов за сегодня
-	const today = now.toISOString().split('T')[0]
+	const today = new Date().toISOString().split('T')[0]
 	const lastRequestDate = user.last_request_date
 		? new Date(user.last_request_date).toISOString().split('T')[0]
 		: null
 
-	if (lastRequestDate !== today) return true // Новый день — обнуляем счетчик
+	if (lastRequestDate !== today) return true // Новый день — счетчик ещё не считается
 	return user.daily_requests < dailyLimit
 }
 
@@ -145,7 +162,40 @@ async function incrementRequests(id) {
 		[today, id],
 	)
 
-	return result.rows[0].daily_requests
+	return result.rows[0] ? result.rows[0].daily_requests : null
+}
+
+// ===================== ЛИМИТ ОТКРЫТИЯ УРОКОВ =====================
+// Триал (дни 0-5): 5 уроков/день. После: 2 урока/день.
+async function canOpenLesson(id) {
+	const user = await getUser(id)
+	if (!user) return false
+	if (isPrivileged(id, user)) return true
+
+	const dailyLimit = daysSinceRegistration(user) <= 5 ? 5 : 2
+
+	const today = new Date().toISOString().split('T')[0]
+	const lastLessonDate = user.last_lesson_date
+		? new Date(user.last_lesson_date).toISOString().split('T')[0]
+		: null
+
+	if (lastLessonDate !== today) return true
+	return user.daily_lessons < dailyLimit
+}
+
+async function incrementLessons(id) {
+	const today = new Date().toISOString().split('T')[0]
+	const result = await db.query(
+		`
+    UPDATE users 
+    SET daily_lessons = CASE WHEN last_lesson_date::date = $1::date THEN daily_lessons + 1 ELSE 1 END,
+        last_lesson_date = $1 
+    WHERE telegram_id = $2
+    RETURNING daily_lessons`,
+		[today, id],
+	)
+
+	return result.rows[0] ? result.rows[0].daily_lessons : null
 }
 
 async function updateUserLanguage(id, lang) {
@@ -155,13 +205,11 @@ async function updateUserLanguage(id, lang) {
 			id,
 		])
 	} catch (error) {
-		// Код ошибки 42703 означает "column does not exist"
 		if (error.code === '42703') {
 			console.log("⚠️ Колонка 'lang' не найдена, создаю...")
 			await db.query(
 				"ALTER TABLE users ADD COLUMN IF NOT EXISTS lang VARCHAR(2) DEFAULT 'en'",
 			)
-			// Повторяем попытку после создания
 			await db.query('UPDATE users SET lang = $1 WHERE telegram_id = $2', [
 				lang,
 				id,
@@ -171,12 +219,14 @@ async function updateUserLanguage(id, lang) {
 		}
 	}
 }
+
 async function getUserLanguage(id) {
 	const user = await getUser(id)
-	return user ? user.lang : 'en' // По умолчанию английский
+	return user ? user.lang : 'en'
 }
 
 module.exports = {
+	ensureSchema,
 	createUser,
 	getUser,
 	getUserById: getUser,
@@ -189,6 +239,8 @@ module.exports = {
 	isSubActive,
 	canRequest,
 	incrementRequests,
+	canOpenLesson,
+	incrementLessons,
 	updateUserLanguage,
 	getUserLanguage,
 }
