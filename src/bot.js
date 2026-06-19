@@ -19,6 +19,7 @@ bot.use(session())
 // Теперь любой пользователь может начать диалог с Майклом.
 
 const {
+  ensureSchema,
   getAllUsers,
   revokeSubscription,
   canRequest,
@@ -383,7 +384,9 @@ async function sendLongMessage(ctx, text, keyboard = null) {
 app.use(express.json())
 app.get('/', (req, res) => res.send('🤖 Academy is running!'))
 
-function startBot() {
+async function startBot() {
+  await ensureSchema() // <-- добавляем сюда, до webhook/launch
+
   const RENDER_URL = process.env.RENDER_EXTERNAL_URL
   if (RENDER_URL) {
     const secretPath = `/telegraf/${bot.secretPathComponent()}`
