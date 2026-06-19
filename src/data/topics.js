@@ -137,28 +137,15 @@ const topics = {
 	],
 }
 
-function getTopicInfoById(id) {
-	for (const [level, lessons] of Object.entries(germanTopics)) {
-		const found = lessons.find(t => t.id === id)
-
-		if (found) {
-			return {
-				id: found.id,
-				title: found.title,
-				level,
-			}
-		}
+function getTopicById(id) {
+	for (const level of Object.values(topics)) {
+		const found = level.find(t => t.id === id)
+		if (found) return found.title
 	}
-
-	return {
-		id: null,
-		title: 'Allgemeines Deutsch',
-		level: 'Unknown',
-	}
+	return 'General English Practice'
 }
 
 module.exports = {
 	topics,
 	getTopicById,
-	getTopicInfoById
 }
