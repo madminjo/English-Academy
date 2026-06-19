@@ -1,6 +1,7 @@
 require('dotenv').config()
 const { Telegraf, Markup, session } = require('telegraf')
 const express = require('express')
+const { sanitizeForTelegram } = require('./utils/sanitizeHtml')
 
 // Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN)
@@ -280,16 +281,16 @@ bot.on('text', async ctx => {
       .deleteMessage(ctx.chat.id, waitingMsg.message_id)
       .catch(() => {})
       
-    await sendLongMessage(
-      ctx,
-      response.text,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('📖 Урок дня', 'action_today'),
-          Markup.button.callback('⬅️ В меню', 'action_main_menu'),
-        ],
-      ]),
-    )
+await sendLongMessage(
+  ctx,
+  sanitizeForTelegram(response.text),
+  Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📖 Урок дня', 'action_today'),
+      Markup.button.callback('⬅️ В меню', 'action_main_menu'),
+    ],
+  ]),
+)
   } catch (error) {
     console.error(error)
     await ctx.reply('⚠️ Ошибка ИИ. Попробуй позже.')
@@ -375,9 +376,15 @@ bot.action(/set_lang_(en|de)/, async ctx => {
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
-  if (text.length <= 4000) return ctx.replyWithHTML(text, keyboard)
-  const chunks = text.match(/.{1,4000}/gs)
-  for (const chunk of chunks) await ctx.replyWithHTML(chunk)
+  const chunks = text.length <= 4000 ? [text] : text.match(/.{1,4000}/gs)
+  for (const chunk of chunks) {
+    try {
+      await ctx.replyWithHTML(chunk, chunk === chunks[chunks.length - 1] ? keyboard : undefined)
+    } catch (err) {
+      console.error('Ошибка parse_mode HTML, отправляю как plain text:', err.message)
+      await ctx.reply(chunk.replace(/<[^>]+>/g, ''), chunk === chunks[chunks.length - 1] ? keyboard : undefined)
+    }
+  }
 }
 
 // --- СЕРВЕР И ЗАПУСК ---
