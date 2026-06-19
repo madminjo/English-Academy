@@ -82,6 +82,7 @@ async function generateContentWithRetry(
 				body: JSON.stringify({
 					model: 'openai/gpt-oss-20b', // Твоя рабочая модель
 					input: fullInput,
+					max_output_tokens: options.maxOutputTokens || 900,
 				}),
 			})
 
@@ -101,7 +102,7 @@ async function generateContentWithRetry(
 			// console.log('🔍 [Groq RAW]:', JSON.stringify(data).slice(0, 500))
 			// Парсим JSON строго по структуре эндпоинта /responses
 			const messageOutput = data.output?.find(item => item.type === 'message')
-			const aiText =
+			let aiText =
 				messageOutput?.content?.[0]?.type === 'output_text'
 					? messageOutput.content[0].text
 					: messageOutput?.content?.[0]?.text || ''
@@ -110,6 +111,19 @@ async function generateContentWithRetry(
 				throw new Error(
 					'Не удалось извлечь текст ответа из JSON структуры Groq',
 				)
+			}
+
+			// 👇 Жёсткое ограничение длины ответа — 3500 символов
+			const MAX_CHARS = 3500
+			if (aiText.length > MAX_CHARS) {
+				let trimmed = aiText.slice(0, MAX_CHARS)
+				const lastNewline = trimmed.lastIndexOf('\n')
+				const lastDot = trimmed.lastIndexOf('.')
+				const cutPoint = Math.max(lastNewline, lastDot)
+				if (cutPoint > MAX_CHARS * 0.7) {
+					trimmed = trimmed.slice(0, cutPoint + 1)
+				}
+				aiText = trimmed
 			}
 
 			// Возвращаем объект со свойством text, чтобы в файле today.js ничего не ломалось
