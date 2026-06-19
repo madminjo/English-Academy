@@ -8,7 +8,17 @@ module.exports = bot => {
 		const page = ctx.match && ctx.match[2] ? parseInt(ctx.match[2]) : 1
 		const wordsPerPage = 20
 
-		const allWords = await wordService.getUserVocabulary(ctx.from.id)
+	let allWords = []
+
+try {
+	allWords = await wordService.getUserVocabulary(ctx.from.id)
+} catch (err) {
+	console.error('Ошибка загрузки словаря:', err)
+
+	return ctx.reply(
+		'⚠️ Не удалось загрузить словарь. Попробуй позже.'
+	)
+}
 
 		if (!allWords || allWords.length === 0) {
 			return ctx
