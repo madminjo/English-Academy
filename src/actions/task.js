@@ -12,18 +12,26 @@ module.exports = bot => {
 		ctx.session = ctx.session || {}
 		ctx.session.waitingForHomework = true
 
-		const lang = ctx.session.lang || 'en'
-		const topicData = getTopicsByLang(lang)
+		let lang = ctx.session.lang || 'en'
 		let topicName = lang === 'de' ? 'Übung des Tages' : 'Общая практика'
 		let currentDay = 1
 
 		try {
 			const user = await getUserById(ctx.from.id)
+
+			// Подтягиваем язык из БД, если сессия рассинхронизировалась
+			if (user?.lang && user.lang !== lang) {
+				lang = user.lang
+				ctx.session.lang = lang
+			}
+
 			if (user && user.current_day) {
 				currentDay = user.current_day
-				if (typeof topicData.getTopicById === 'function') {
-					topicName = topicData.getTopicById(currentDay)
-				}
+			}
+
+			const topicData = getTopicsByLang(lang)
+			if (typeof topicData.getTopicById === 'function') {
+				topicName = topicData.getTopicById(currentDay)
 			}
 		} catch (dbError) {
 			console.error('⚠️ Не удалось загрузить данные из БД:', dbError.message)
@@ -47,6 +55,10 @@ module.exports = bot => {
 					[Markup.button.callback('❌ Отмена', 'action_main_menu')],
 				]).reply_markup,
 			})
-			.catch(err => console.log('Текст не изменился, игнорируем'))
+			.catch(err => {
+				if (!err.description?.includes('message is not modified')) {
+					console.error('Ошибка при обновлении задания:', err.message)
+				}
+			})
 	})
 }
