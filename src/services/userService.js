@@ -9,6 +9,7 @@ async function ensureSchema() {
 		{ name: 'last_request_date', ddl: 'DATE' },
 		{ name: 'daily_lessons', ddl: 'INTEGER DEFAULT 0' },
 		{ name: 'last_lesson_date', ddl: 'DATE' },
+		{ name: 'last_opened_lesson_day', ddl: 'INTEGER' }, // какой урок (day_number) открывали последним
 	]
 
 	for (const col of columns) {
@@ -167,6 +168,8 @@ async function incrementRequests(id) {
 
 // ===================== ЛИМИТ ОТКРЫТИЯ УРОКОВ =====================
 // Триал (дни 0-5): 5 уроков/день. После: 2 урока/день.
+
+// Старая версия (оставлена для обратной совместимости, если используется где-то ещё)
 async function canOpenLesson(id) {
 	const user = await getUser(id)
 	if (!user) return false
@@ -183,7 +186,35 @@ async function canOpenLesson(id) {
 	return user.daily_lessons < dailyLimit
 }
 
-async function incrementLessons(id) {
+// Новая версия: учитывает повторное открытие ТОГО ЖЕ урока в тот же день (бесплатно)
+// Возвращает { allowed: bool, alreadyOpenedToday: bool }
+async function checkLessonAccess(id, dayNumber) {
+	const user = await getUser(id)
+	if (!user) return { allowed: false, alreadyOpenedToday: false }
+	if (isPrivileged(id, user)) return { allowed: true, alreadyOpenedToday: false }
+
+	const today = new Date().toISOString().split('T')[0]
+	const lastLessonDate = user.last_lesson_date
+		? new Date(user.last_lesson_date).toISOString().split('T')[0]
+		: null
+
+	// Уже открывал именно ЭТОТ урок сегодня — пускаем бесплатно, без траты лимита
+	if (lastLessonDate === today && user.last_opened_lesson_day === dayNumber) {
+		return { allowed: true, alreadyOpenedToday: true }
+	}
+
+	const dailyLimit = daysSinceRegistration(user) <= 5 ? 5 : 2
+
+	if (lastLessonDate !== today) {
+		// Новый день — счётчик ещё не считается
+		return { allowed: true, alreadyOpenedToday: false }
+	}
+
+	return { allowed: user.daily_lessons < dailyLimit, alreadyOpenedToday: false }
+}
+
+// Старая версия increment (оставлена для обратной совместимости)
+async function incrementLessonsLegacy(id) {
 	const today = new Date().toISOString().split('T')[0]
 	const result = await db.query(
 		`
@@ -193,6 +224,23 @@ async function incrementLessons(id) {
     WHERE telegram_id = $2
     RETURNING daily_lessons`,
 		[today, id],
+	)
+
+	return result.rows[0] ? result.rows[0].daily_lessons : null
+}
+
+// Новая версия increment: тоже запоминает, какой урок открыли (для checkLessonAccess)
+async function incrementLessons(id, dayNumber) {
+	const today = new Date().toISOString().split('T')[0]
+	const result = await db.query(
+		`
+    UPDATE users 
+    SET daily_lessons = CASE WHEN last_lesson_date::date = $1::date THEN daily_lessons + 1 ELSE 1 END,
+        last_lesson_date = $1,
+        last_opened_lesson_day = $3
+    WHERE telegram_id = $2
+    RETURNING daily_lessons`,
+		[today, id, dayNumber],
 	)
 
 	return result.rows[0] ? result.rows[0].daily_lessons : null
@@ -239,8 +287,9 @@ module.exports = {
 	isSubActive,
 	canRequest,
 	incrementRequests,
-	canOpenLesson,
-	incrementLessons,
+	canOpenLesson, // оставлена для совместимости
+	checkLessonAccess, // новая, используем в today.js
+	incrementLessons, // теперь принимает (id, dayNumber)
 	updateUserLanguage,
 	getUserLanguage,
 }

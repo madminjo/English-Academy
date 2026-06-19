@@ -1,16 +1,14 @@
 const { Markup } = require('telegraf')
 const db = require('../services/dbService')
-const { getUserById } = require('../services/userService')
+const { getUserById, checkLessonAccess, incrementLessons } = require('../services/userService')
 const { generateContentWithRetry } = require('../services/aiService')
 const { sanitizeForTelegram } = require('../utils/sanitizeHtml')
 
-// Динамически определяем, какие темы грузить (берём именно свойство .topics)
 const getTopicsByLang = lang =>
 	lang === 'de'
 		? require('../data/german_topics').topics
 		: require('../data/topics').topics
 
-// Генератор промпта с учетом контекста Майкла
 const getLessonPrompt = (topicName, targetDay, lang) => {
 	const isGerman = lang === 'de'
 	const persona = isGerman
@@ -80,11 +78,10 @@ module.exports = bot => {
 		let lang = ctx.session.lang || 'en'
 		let currentDay = 1
 		let currentTopic = 'Урок дня'
-		let user = null
 
 		try {
-			user = await getUserById(ctx.from.id)
-			// Подтягиваем язык из БД, если сессия рассинхронизировалась
+			const user = await getUserById(ctx.from.id)
+
 			if (user?.lang && user.lang !== lang) {
 				lang = user.lang
 				ctx.session.lang = lang
@@ -101,13 +98,21 @@ module.exports = bot => {
 			console.error('Ошибка БД / поиска темы:', err.message)
 		}
 
+		// 1. Проверка лимита (с учётом повторного открытия того же урока)
+		const access = await checkLessonAccess(ctx.from.id, currentDay)
+		if (!access.allowed) {
+			return ctx.reply(
+				'⚠️ <b>Лимит уроков на сегодня исчерпан!</b>\nПриходи завтра или оформи подписку для безлимитного доступа, bro.',
+				{ parse_mode: 'HTML' },
+			)
+		}
+
 		const statusMsg = await ctx
 			.replyWithHTML('⏳ <b>Майкл открывает конспект...</b>')
 			.catch(() => {})
 
 		let lessonText = null
 
-		// Попытка взять урок из кэша
 		try {
 			const cached = await db.query(
 				'SELECT lesson_text FROM generated_lessons WHERE day_number = $1 AND lang = $2',
@@ -120,7 +125,6 @@ module.exports = bot => {
 			console.error('Ошибка кэша:', dbErr.message)
 		}
 
-		// Если в кэше нет — генерируем через ИИ
 		if (!lessonText) {
 			try {
 				const response = await generateContentWithRetry(
@@ -138,7 +142,6 @@ module.exports = bot => {
 
 				lessonText = sanitizeForTelegram(response.text)
 
-				// Кэшируем, но не блокируем ответ пользователю, если запись не удалась
 				try {
 					await db.query(
 						'INSERT INTO generated_lessons (day_number, topic_name, lesson_text, lang) VALUES ($1, $2, $3, $4) ON CONFLICT (day_number, lang) DO NOTHING',
@@ -155,7 +158,6 @@ module.exports = bot => {
 				return ctx.reply('⚠️ Ошибка генерации. Попробуй позже, bro!')
 			}
 		} else {
-			// Кэш мог быть сохранён до внедрения санитайзера — на всякий случай чистим и при выдаче из кэша
 			lessonText = sanitizeForTelegram(lessonText)
 		}
 
@@ -172,5 +174,13 @@ module.exports = bot => {
 		])
 
 		await sendSplitMessage(ctx, lessonText, keyboard)
+
+		// 2. Засчитываем открытие только если это НЕ повторный просмотр того же урока сегодня
+		if (!access.alreadyOpenedToday) {
+			const remaining = await incrementLessons(ctx.from.id, currentDay)
+			console.log(`Пользователь ${ctx.from.id} открыл урок ${currentDay}. Открыто за день: ${remaining}`)
+		} else {
+			console.log(`Пользователь ${ctx.from.id} повторно открыл урок ${currentDay} сегодня — лимит не тратится`)
+		}
 	})
 }
