@@ -6,11 +6,10 @@ async function subscriptionGuard(ctx, next) {
 	if (ctx.from.id === ADMIN_ID) return next()
 
 	try {
-		// Проверяем подписку (isSubActive) и лимиты запросов (canRequest)
+
 		const active = await isSubActive(ctx.from.id)
 		const hasFreeAccess = await canRequest(ctx.from.id)
 
-		// Если подписка не активна И нет доступа к запросам — блокируем
 		if (!active && !hasFreeAccess) {
 			const message =
 				`⚠️ <b>Доступ ограничен!</b>\n\n` +
