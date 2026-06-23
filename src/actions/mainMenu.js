@@ -43,6 +43,7 @@ module.exports = bot => {
 					],
 					[Markup.button.callback('💎 Тарифы', 'action_pricing')],
 					[Markup.button.callback('⚙️ Настройки времени', 'action_settings')],
+					[Markup.button.callback('📄 Документы', 'action_docs')]
 				]).reply_markup,
 			})
 			.catch(err => console.log('Текст не изменился, игнорируем'))

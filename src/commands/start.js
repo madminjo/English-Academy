@@ -50,6 +50,7 @@ module.exports = bot => {
 						Markup.button.callback('⚙️ Настройки времени', 'action_settings'),
 					],
 					[Markup.button.callback('💡 Как это работает?', 'action_help')],
+					[Markup.button.callback('📄 Документы', 'action_docs')]
 				]),
 			)
 		} catch (err) {

@@ -533,6 +533,38 @@ bot.action('action_pricing', async ctx => {
   })
 })
 
+bot.action('action_docs', async ctx => {
+  await ctx.editMessageText(
+    '📄 <b>Документы и поддержка</b>\n\nВыберите нужный пункт:',
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.url(
+            '📄 Политика конфиденциальности',
+            'https://telegra.ph/Politika-konfidencialnosti-06-21-31'
+          ),
+        ],
+        [
+          Markup.button.url(
+            '📜 Пользовательское соглашение',
+            'https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19'
+          ),
+        ],
+        [
+          Markup.button.url(
+            '🛠 Поддержка',
+            'https://t.me/scrayass'
+          ),
+        ],
+        [
+          Markup.button.callback('⬅️ В меню', 'action_main_menu'),
+        ],
+      ]),
+    }
+  )
+})
+
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async function sendLongMessage(ctx, text, keyboard = null) {
   const chunks = text.length <= 4000 ? [text] : text.match(/.{1,4000}/gs)
