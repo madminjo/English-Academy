@@ -3,16 +3,13 @@ const { Telegraf, Markup, session } = require('telegraf')
 const express = require('express')
 const { sanitizeForTelegram } = require('./utils/sanitizeHtml')
 
-// Инициализация бота
 const bot = new Telegraf(process.env.BOT_TOKEN)
 const app = express()
 const PORT = process.env.PORT || 3000
 
-// Сервисы и Middleware
 const { generateContentWithRetry } = require('./services/aiService')
 const { subscriptionGuard } = require('./middlewares/subscriptionGuard')
 
-// Включаем сессии
 bot.use(session())
 
 const {
@@ -26,19 +23,16 @@ const {
 	setSubscription,
 } = require('./services/userService')
 
-// --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot)
-
 require('./actions/mainMenu')(bot)
 require('./actions/words')(bot)
 require('./actions/task')(bot)
 require('./actions/lessons')(bot)
 require('./actions/myVocabulary')(bot)
 require('./actions/today')(bot)
-
 require('./cron/dailyLesson')(bot)
 
-// --- 🌍 НАСТРОЙКА ЧАСОВЫХ ПОЯСОВ ---
+// --- ЧАСОВЫЕ ПОЯСА ---
 async function sendTimezoneMenu(ctx, isEdit = false) {
 	const text =
 		'🌍 <b>НАСТРОЙКА ВРЕМЕНИ АКАДЕМИИ</b>\n───────────────────────\nБро, выбери регион, чтобы уроки приходили строго в 07:00 утра по твоему времени!'
@@ -69,6 +63,58 @@ bot.action('tz_group_asia', async ctx => {
 	})
 })
 
+bot.action('tz_group_moscow', async ctx => {
+	await ctx.editMessageText('📍 <b>Выбери регион:</b>', {
+		parse_mode: 'HTML',
+		...Markup.inlineKeyboard([
+			[
+				Markup.button.callback('Москва (UTC+3)', 'set_tz_Europe/Moscow'),
+				Markup.button.callback('Минск (UTC+3)', 'set_tz_Europe/Minsk'),
+			],
+			[Markup.button.callback('Баку (UTC+4)', 'set_tz_Asia/Baku')],
+			[Markup.button.callback('⬅️ Назад', 'tz_back')],
+		]),
+	})
+})
+
+bot.action('tz_group_europe', async ctx => {
+	await ctx.editMessageText('📍 <b>Выбери пояс:</b>', {
+		parse_mode: 'HTML',
+		...Markup.inlineKeyboard([
+			[
+				Markup.button.callback('Берлин (UTC+1)', 'set_tz_Europe/Berlin'),
+				Markup.button.callback('Киев (UTC+2)', 'set_tz_Europe/Kiev'),
+			],
+			[Markup.button.callback('Лондон (UTC+0)', 'set_tz_Europe/London')],
+			[Markup.button.callback('⬅️ Назад', 'tz_back')],
+		]),
+	})
+})
+
+bot.action('tz_group_other', async ctx => {
+	await ctx.editMessageText('📍 <b>Популярные пояса:</b>', {
+		parse_mode: 'HTML',
+		...Markup.inlineKeyboard([
+			[Markup.button.callback('Нью-Йорк (UTC-5)', 'set_tz_America/New_York')],
+			[Markup.button.callback('Дубай (UTC+4)', 'set_tz_Asia/Dubai')],
+			[Markup.button.callback('Бангкок (UTC+7)', 'set_tz_Asia/Bangkok')],
+			[Markup.button.callback('⬅️ Назад', 'tz_back')],
+		]),
+	})
+})
+
+bot.action('tz_back', async ctx => await sendTimezoneMenu(ctx, true))
+
+bot.action(/^set_tz_(.+)$/, async ctx => {
+	ctx.session.timezone = ctx.match[1]
+	await ctx.answerCbQuery('Время успешно настроено! 🔥')
+	await ctx.deleteMessage().catch(() => {})
+	await ctx.replyWithHTML(
+		`🎯 <b>Часовой пояс <code>${ctx.session.timezone}</code> сохранен!</b>\nТеперь Майкл будет писать тебе вовремя.`,
+	)
+})
+
+// --- АДМИН ---
 bot.action('adm_back', async ctx => {
 	const users = await getAllUsers()
 	const userButtons = users.map(u => [
@@ -219,64 +265,58 @@ bot.action(/^adm_choose_term_(\d+)$/, async ctx => {
 	})
 })
 
-bot.action('tz_group_moscow', async ctx => {
-	await ctx.editMessageText('📍 <b>Выбери регион:</b>', {
-		parse_mode: 'HTML',
-		...Markup.inlineKeyboard([
-			[
-				Markup.button.callback('Москва (UTC+3)', 'set_tz_Europe/Moscow'),
-				Markup.button.callback('Минск (UTC+3)', 'set_tz_Europe/Minsk'),
-			],
-			[Markup.button.callback('Баку (UTC+4)', 'set_tz_Asia/Baku')],
-			[Markup.button.callback('⬅️ Назад', 'tz_back')],
-		]),
-	})
-})
-
-bot.action('tz_group_europe', async ctx => {
-	await ctx.editMessageText('📍 <b>Выбери пояс:</b>', {
-		parse_mode: 'HTML',
-		...Markup.inlineKeyboard([
-			[
-				Markup.button.callback('Берлин (UTC+1)', 'set_tz_Europe/Berlin'),
-				Markup.button.callback('Киев (UTC+2)', 'set_tz_Europe/Kiev'),
-			],
-			[Markup.button.callback('Лондон (UTC+0)', 'set_tz_Europe/London')],
-			[Markup.button.callback('⬅️ Назад', 'tz_back')],
-		]),
-	})
-})
-
-bot.action('tz_group_other', async ctx => {
-	await ctx.editMessageText('📍 <b>Популярные пояса:</b>', {
-		parse_mode: 'HTML',
-		...Markup.inlineKeyboard([
-			[Markup.button.callback('Нью-Йорк (UTC-5)', 'set_tz_America/New_York')],
-			[Markup.button.callback('Дубай (UTC+4)', 'set_tz_Asia/Dubai')],
-			[Markup.button.callback('Бангкок (UTC+7)', 'set_tz_Asia/Bangkok')],
-			[Markup.button.callback('⬅️ Назад', 'tz_back')],
-		]),
-	})
-})
-
-bot.action('tz_back', async ctx => await sendTimezoneMenu(ctx, true))
-
-bot.action(/^set_tz_(.+)$/, async ctx => {
-	ctx.session.timezone = ctx.match[1]
-	await ctx.answerCbQuery('Время успешно настроено! 🔥')
-	await ctx.deleteMessage().catch(() => {})
-	await ctx.replyWithHTML(
-		`🎯 <b>Часовой пояс <code>${ctx.session.timezone}</code> сохранен!</b>\nТеперь Майкл будет писать тебе вовремя.`,
-	)
-})
-
 // --- ГЛОБАЛЬНЫЙ ФЛАГ УВЕДОМЛЕНИЙ ---
 let adminSpyMode = true
+
+// --- BROADCAST (до bot.on('text')!) ---
+bot.command('broadcast', async ctx => {
+	if (ctx.from.id !== 5037778442) return
+
+	const text = ctx.message.text.replace('/broadcast', '').trim()
+
+	if (!text) {
+		return ctx.reply('❌ Напиши текст сразу после команды:\n/broadcast Привет всем!')
+	}
+
+	const users = await getAllUsers()
+	let success = 0
+	let failed = 0
+
+	const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
+
+	for (const user of users) {
+		const targetId = user.telegram_id || user.id
+		if (!targetId) continue
+
+		try {
+			await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
+			success++
+		} catch (err) {
+			failed++
+			console.error(`❌ Не удалось отправить юзеру ${targetId}:`, err.message)
+		}
+
+		if ((success + failed) % 20 === 0) {
+			await ctx.telegram.editMessageText(
+				ctx.chat.id, statusMsg.message_id, undefined,
+				`📢 Рассылка в процессе... ${success + failed}/${users.length}`,
+			).catch(() => {})
+		}
+
+		await new Promise(resolve => setTimeout(resolve, 50))
+	}
+
+	await ctx.telegram.editMessageText(
+		ctx.chat.id, statusMsg.message_id, undefined,
+		`✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed}`,
+		{ parse_mode: 'HTML' },
+	)
+})
 
 // --- ОБРАБОТКА ТЕКСТА ---
 bot.on('text', async ctx => {
 
-	// 📩 Пересылаем все сообщения пользователей админу
+	// 📩 Пересылаем сообщения пользователей админу
 	if (ctx.from.id !== 5037778442 && adminSpyMode) {
 		await ctx.telegram.sendMessage(
 			5037778442,
@@ -303,54 +343,9 @@ bot.on('text', async ctx => {
 		return
 	}
 
-	// 📢 Если админ отправляет рассылку
-if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
-    ctx.session.waitingForBroadcast = false
-    const text = ctx.message.text.replace(/\\n/g, '\n')
-
-    const users = await getAllUsers()
-    let success = 0
-    let failed = 0
-
-    console.log(`📢 Рассылка: найдено ${users.length} пользователей`)
-    console.log('Список ID:', users.map(u => u.telegram_id || u.id))
-
-    const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
-
-    for (const user of users) {
-        const targetId = user.telegram_id || user.id
-        console.log(`Отправляю юзеру: ${targetId}`)
-        if (!targetId) continue
-
-        try {
-            await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
-            success++
-            console.log(`✅ Отправлено: ${targetId}`)
-        } catch (err) {
-            failed++
-            console.error(`❌ Не удалось отправить юзеру ${targetId}:`, err.message)
-        }
-
-        if ((success + failed) % 20 === 0) {
-            await ctx.telegram.editMessageText(
-                ctx.chat.id, statusMsg.message_id, undefined,
-                `📢 Рассылка в процессе... ${success + failed}/${users.length}`,
-            ).catch(() => {})
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 50))
-    }
-
-    await ctx.telegram.editMessageText(
-        ctx.chat.id, statusMsg.message_id, undefined,
-        `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
-        { parse_mode: 'HTML' },
-    )
-    return
-}
 	if (!ctx.session?.waitingForHomework) return
 
-	// 1. Проверка лимита домашки
+	// Проверка лимита домашки
 	const allowed = await canUseFeature(ctx.from.id, 'homework')
 	if (!allowed) {
 		ctx.session.waitingForHomework = false
@@ -366,7 +361,6 @@ if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
 		)
 	}
 
-	// 2. ОПРЕДЕЛЕНИЕ ЯЗЫКА
 	const lang = ctx.session?.lang || 'en'
 	const langName = lang === 'de' ? 'Немецком' : 'Английском'
 
@@ -499,44 +493,6 @@ bot.action(/set_lang_(en|de)/, async ctx => {
 			},
 		)
 		.catch(err => console.error('Ошибка:', err))
-})
-
-// --- BROADCAST ---
-bot.command('broadcast', async ctx => {
-    if (ctx.from.id !== 5037778442) return
-    
-    // Текст после команды: /broadcast Привет всем!
-    const text = ctx.message.text.replace('/broadcast', '').trim()
-    
-    if (!text) {
-        return ctx.reply('❌ Напиши текст сразу после команды:\n/broadcast Привет всем!')
-    }
-    
-    const users = await getAllUsers()
-    let success = 0
-    let failed = 0
-    
-    const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
-    
-    for (const user of users) {
-        const targetId = user.telegram_id || user.id
-        if (!targetId) continue
-        
-        try {
-            await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
-            success++
-        } catch (err) {
-            failed++
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 50))
-    }
-    
-    await ctx.telegram.editMessageText(
-        ctx.chat.id, statusMsg.message_id, undefined,
-        `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed}`,
-        { parse_mode: 'HTML' },
-    )
 })
 
 // --- ТАРИФЫ ---
