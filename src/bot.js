@@ -10,14 +10,10 @@ const PORT = process.env.PORT || 3000
 
 // Сервисы и Middleware
 const { generateContentWithRetry } = require('./services/aiService')
-// Блокировку subscriptionGuard импортируем, но убираем из глобального использования
 const { subscriptionGuard } = require('./middlewares/subscriptionGuard')
 
 // Включаем сессии
 bot.use(session())
-
-// 🔥 УБРАНО: bot.use(subscriptionGuard) больше не блокирует всех подряд на входе!
-// Теперь любой пользователь может начать диалог с Майклом.
 
 const {
 	ensureSchema,
@@ -32,7 +28,6 @@ const {
 
 // --- СВЯЗЫВАЕМ МОДУЛИ ---
 require('./commands/start')(bot)
-// require('./commands/profile')(bot);
 
 require('./actions/mainMenu')(bot)
 require('./actions/words')(bot)
@@ -48,12 +43,7 @@ async function sendTimezoneMenu(ctx, isEdit = false) {
 	const text =
 		'🌍 <b>НАСТРОЙКА ВРЕМЕНИ АКАДЕМИИ</b>\n───────────────────────\nБро, выбери регион, чтобы уроки приходили строго в 07:00 утра по твоему времени!'
 	const keyboard = Markup.inlineKeyboard([
-		[
-			Markup.button.callback(
-				'🇰🇬 🇰🇿 🇺🇿 Средняя Азия (UTC+5/6)',
-				'tz_group_asia',
-			),
-		],
+		[Markup.button.callback('🇰🇬 🇰🇿 🇺🇿 Средняя Азия (UTC+5/6)', 'tz_group_asia')],
 		[Markup.button.callback('🇷🇺 Москва и СНГ (UTC+3)', 'tz_group_moscow')],
 		[Markup.button.callback('🇪🇺 Европа (UTC+1/2)', 'tz_group_europe')],
 		[Markup.button.callback('🌎 Другие пояса / США', 'tz_group_other')],
@@ -87,14 +77,12 @@ bot.action('adm_back', async ctx => {
 			`adm_manage_${u.id}`,
 		),
 	])
-
 	const filterButtons = [
 		[
 			Markup.button.callback('🆓 Без подписки', 'adm_filter_free'),
 			Markup.button.callback('💎 С подпиской', 'adm_filter_subscribed'),
 		],
 	]
-
 	await ctx.editMessageText('👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>', {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([...filterButtons, ...userButtons]),
@@ -103,7 +91,6 @@ bot.action('adm_back', async ctx => {
 
 bot.command('admin', async ctx => {
 	if (ctx.from.id !== 5037778442) return
-
 	const users = await getAllUsers()
 	const userButtons = users.map(u => [
 		Markup.button.callback(
@@ -111,14 +98,12 @@ bot.command('admin', async ctx => {
 			`adm_manage_${u.id}`,
 		),
 	])
-
 	const filterButtons = [
 		[
 			Markup.button.callback('🆓 Без подписки', 'adm_filter_free'),
 			Markup.button.callback('💎 С подпиской', 'adm_filter_subscribed'),
 		],
 	]
-
 	await ctx.reply('👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>', {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([...filterButtons, ...userButtons]),
@@ -128,7 +113,6 @@ bot.command('admin', async ctx => {
 bot.action(/^adm_manage_(\d+)$/, async ctx => {
 	const userId = ctx.match[1]
 	const user = await getUser(userId)
-
 	const userInfo = `
 👑 <b>Управление профилем</b>
 👤 <b>Ник:</b> ${user.username || 'Нет'}
@@ -136,16 +120,10 @@ bot.action(/^adm_manage_(\d+)$/, async ctx => {
 📊 <b>Статус:</b> ${user.status}
 📅 <b>Подписка до:</b> ${user.sub_end_date ? user.sub_end_date.toLocaleDateString() : '—'}
 `
-
 	await ctx.editMessageText(userInfo, {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([
-			[
-				Markup.button.callback(
-					'✅ Продлить Premium',
-					`adm_choose_term_${userId}`,
-				),
-			],
+			[Markup.button.callback('✅ Продлить Premium', `adm_choose_term_${userId}`)],
 			[Markup.button.callback('❌ Отключить подписку', `adm_off_${userId}`)],
 			[Markup.button.callback('✉️ Написать пользователю', `adm_msg_${userId}`)],
 			[Markup.button.callback('⬅️ Назад к списку', 'adm_back')],
@@ -155,8 +133,7 @@ bot.action(/^adm_manage_(\d+)$/, async ctx => {
 
 bot.action(/^adm_msg_(\d+)$/, async ctx => {
 	const userId = ctx.match[1]
-	ctx.session.adminWritingTo = userId // запоминаем кому пишем
-
+	ctx.session.adminWritingTo = userId
 	await ctx.answerCbQuery()
 	await ctx.editMessageText(
 		`✉️ <b>Напиши текст сообщения для пользователя ${userId}.</b>\n\nОн придёт ему от имени бота.`,
@@ -172,9 +149,7 @@ bot.action(/^adm_msg_(\d+)$/, async ctx => {
 bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async ctx => {
 	const userId = ctx.match[1]
 	const term = ctx.match[2]
-
 	await setSubscription(userId, term)
-
 	await ctx.answerCbQuery(`Подписка установлена на ${term}`)
 	await ctx.editMessageText(
 		`✅ <b>Пользователь ${userId} успешно переведен на статус ${term}!</b>`,
@@ -186,31 +161,26 @@ bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async ctx => {
 		},
 	)
 })
+
 bot.action(/^adm_filter_(free|subscribed)$/, async ctx => {
 	const filter = ctx.match[1]
 	const users = await getUsersByStatus(filter)
-
 	const title =
 		filter === 'free'
 			? '🆓 <b>ПОЛЬЗОВАТЕЛИ БЕЗ ПОДПИСКИ:</b>'
 			: '💎 <b>ПОЛЬЗОВАТЕЛИ С ПОДПИСКОЙ:</b>'
-
 	const userButtons = users.map(u => [
 		Markup.button.callback(
 			`${u.username || u.id} (${u.status})`,
 			`adm_manage_${u.id}`,
 		),
 	])
-
 	if (userButtons.length === 0) {
 		return ctx.editMessageText(`${title}\n\nПусто.`, {
 			parse_mode: 'HTML',
-			...Markup.inlineKeyboard([
-				[Markup.button.callback('⬅️ Назад', 'adm_back')],
-			]),
+			...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад', 'adm_back')]]),
 		})
 	}
-
 	await ctx.editMessageText(title, {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([
@@ -224,7 +194,6 @@ bot.action(/^adm_off_(\d+)$/, async ctx => {
 	const userId = ctx.match[1]
 	await revokeSubscription(userId)
 	await ctx.answerCbQuery('Подписка отключена!')
-
 	await ctx.editMessageText(
 		`Пользователь <b>${userId}</b> теперь имеет статус <b>Free</b>.`,
 		{
@@ -301,138 +270,176 @@ bot.action(/^set_tz_(.+)$/, async ctx => {
 	)
 })
 
-// ⬇️ ЭТО ДОБАВЬ ПЕРЕД bot.on('text', ...)
+// --- ГЛОБАЛЬНЫЙ ФЛАГ УВЕДОМЛЕНИЙ ---
 let adminSpyMode = true
 
+// --- ОБРАБОТКА ТЕКСТА ---
 bot.on('text', async ctx => {
-  // 📩 Пересылаем все сообщения пользователей админу
-  if (ctx.from.id !== 5037778442 && adminSpyMode) {
-    await ctx.telegram.sendMessage(
-      5037778442,
-      `👤 <b>${ctx.from.first_name}</b> (@${ctx.from.username || 'нет'}, ID: <code>${ctx.from.id}</code>)\n${ctx.from.username ? `🔗 <a href="https://t.me/${ctx.from.username}">Открыть аккаунт</a>` : `🔗 <a href="tg://user?id=${ctx.from.id}">Открыть аккаунт</a>`}\n\n${ctx.message.text}`,
-      {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🔕 Отключить уведомления', 'spy_off')],
-        ]),
-      },
-    ).catch(() => {})
-  }
 
-  // Если админ отвечает конкретному пользователю
-  if (ctx.from.id === 5037778442 && ctx.session?.adminWritingTo) {
-    const targetId = ctx.session.adminWritingTo
-    ctx.session.adminWritingTo = null
+	// 📩 Пересылаем все сообщения пользователей админу
+	if (ctx.from.id !== 5037778442 && adminSpyMode) {
+		await ctx.telegram.sendMessage(
+			5037778442,
+			`👤 <b>${ctx.from.first_name}</b> (@${ctx.from.username || 'нет'}, ID: <code>${ctx.from.id}</code>)\n${ctx.from.username ? `🔗 <a href="https://t.me/${ctx.from.username}">Открыть аккаунт</a>` : `🔗 <a href="tg://user?id=${ctx.from.id}">Открыть аккаунт</a>`}\n\n${ctx.message.text}`,
+			{
+				parse_mode: 'HTML',
+				...Markup.inlineKeyboard([
+					[Markup.button.callback('🔕 Отключить уведомления', 'spy_off')],
+				]),
+			},
+		).catch(() => {})
+	}
 
-    try {
-      await ctx.telegram.sendMessage(targetId, ctx.message.text, { parse_mode: 'HTML' })
-      await ctx.reply(`✅ Сообщение отправлено пользователю ${targetId}`)
-    } catch (err) {
-      await ctx.reply(`❌ Не удалось отправить: ${err.message}`)
-    }
-    return
-  }
+	// ✉️ Если админ отвечает конкретному пользователю
+	if (ctx.from.id === 5037778442 && ctx.session?.adminWritingTo) {
+		const targetId = ctx.session.adminWritingTo
+		ctx.session.adminWritingTo = null
+		try {
+			await ctx.telegram.sendMessage(targetId, ctx.message.text, { parse_mode: 'HTML' })
+			await ctx.reply(`✅ Сообщение отправлено пользователю ${targetId}`)
+		} catch (err) {
+			await ctx.reply(`❌ Не удалось отправить: ${err.message}`)
+		}
+		return
+	}
 
-  if (!ctx.session?.waitingForHomework) return
+	// 📢 Если админ отправляет рассылку
+	if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
+		ctx.session.waitingForBroadcast = false
+		const text = ctx.message.text
 
-  // 1. Проверка лимита домашки
-  const allowed = await canUseFeature(ctx.from.id, 'homework')
-  if (!allowed) {
-    ctx.session.waitingForHomework = false
-    return ctx.replyWithHTML(
-      `⏳ Лимит бесплатных проверок исчерпан!\n\n` +
-        `Ты использовал все доступные запросы к ИИ-учителю (3 из 3 за сегодня). Новые проверки откроются автоматически через 24 часа.\n\n` +
-        `🚀Хочешь проверять домашку без ограничений?\n` +
-        `Для оформления подписки напиши нам: @scrayass`,
-      Markup.inlineKeyboard([
-        [Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
-        [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
-      ]),
-    )
-  }
+		const users = await getAllUsers()
+		let success = 0
+		let failed = 0
 
-  // 2. ОПРЕДЕЛЕНИЕ ЯЗЫКА
-  const lang = ctx.session.lang || 'en'
-  const langName = lang === 'de' ? 'Немецком' : 'Английском'
+		const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
 
-  const userHomework = ctx.message.text
-  const currentTopic =
-    ctx.session.currentTopic ||
-    (lang === 'de' ? 'Allgemeines Deutsch' : 'General English')
-  ctx.session.waitingForHomework = false
+		for (const user of users) {
+			const targetId = user.telegram_id || user.id
+			if (!targetId) continue
 
-  const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...')
+			try {
+				await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
+				success++
+			} catch (err) {
+				failed++
+				console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
+			}
 
-  const remaining = await incrementFeature(ctx.from.id, 'homework')
-  console.log(`Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`)
+			if ((success + failed) % 20 === 0) {
+				await ctx.telegram.editMessageText(
+					ctx.chat.id, statusMsg.message_id, undefined,
+					`📢 Рассылка в процессе... ${success + failed}/${users.length}`,
+				).catch(() => {})
+			}
 
-  try {
-    const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. 
+			await new Promise(resolve => setTimeout(resolve, 50))
+		}
+
+		await ctx.telegram.editMessageText(
+			ctx.chat.id, statusMsg.message_id, undefined,
+			`✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
+			{ parse_mode: 'HTML' },
+		)
+		return
+	}
+
+	if (!ctx.session?.waitingForHomework) return
+
+	// 1. Проверка лимита домашки
+	const allowed = await canUseFeature(ctx.from.id, 'homework')
+	if (!allowed) {
+		ctx.session.waitingForHomework = false
+		return ctx.replyWithHTML(
+			`⏳ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
+				`Ты использовал все доступные запросы к ИИ-учителю (3 из 3 за сегодня). Новые проверки откроются автоматически через 24 часа.\n\n` +
+				`🚀 <b>Хочешь проверять домашку без ограничений?</b>\n` +
+				`Для оформления подписки напиши нам: @scrayass`,
+			Markup.inlineKeyboard([
+				[Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
+				[Markup.button.callback('⬅️ В меню', 'action_main_menu')],
+			]),
+		)
+	}
+
+	// 2. ОПРЕДЕЛЕНИЕ ЯЗЫКА
+	const lang = ctx.session?.lang || 'en'
+	const langName = lang === 'de' ? 'Немецком' : 'Английском'
+
+	const userHomework = ctx.message.text
+	const currentTopic =
+		ctx.session.currentTopic ||
+		(lang === 'de' ? 'Allgemeines Deutsch' : 'General English')
+	ctx.session.waitingForHomework = false
+
+	const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...')
+
+	const remaining = await incrementFeature(ctx.from.id, 'homework')
+	console.log(`Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`)
+
+	try {
+		const prompt = `Ты — Майкл, преподаватель с 40-летним опытом. 
     Проверь текст, написанный на ${langName}: "${userHomework}". 
     Тема: "${currentTopic}". 
     Дай разбор на ${langName} языке: ❌ ОШИБКИ, 📝 ИДЕАЛЬНАЯ ВЕРСИЯ, 💡 ПОЧЕМУ ТАК?, 🚀 СЛЕНГ, 🎯 ЗАДАНИЕ, 🌟 СОВЕТ. Используй HTML.`
 
-    const response = await generateContentWithRetry(
-      { model: 'gemini-2.0-flash', contents: prompt },
-      3,
-      2500,
-    )
+		const response = await generateContentWithRetry(
+			{ model: 'gemini-2.0-flash', contents: prompt },
+			3,
+			2500,
+		)
 
-    await ctx.telegram.deleteMessage(ctx.chat.id, waitingMsg.message_id).catch(() => {})
+		await ctx.telegram.deleteMessage(ctx.chat.id, waitingMsg.message_id).catch(() => {})
 
-    await sendLongMessage(
-      ctx,
-      sanitizeForTelegram(response.text),
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('📖 Урок дня', 'action_today'),
-          Markup.button.callback('⬅️ В меню', 'action_main_menu'),
-        ],
-      ]),
-    )
-  } catch (error) {
-    console.error(error)
-    await ctx.reply('⚠️ Ошибка ИИ. Попробуй позже.')
-  }
+		await sendLongMessage(
+			ctx,
+			sanitizeForTelegram(response.text),
+			Markup.inlineKeyboard([
+				[
+					Markup.button.callback('📖 Урок дня', 'action_today'),
+					Markup.button.callback('⬅️ В меню', 'action_main_menu'),
+				],
+			]),
+		)
+	} catch (error) {
+		console.error(error)
+		await ctx.reply('⚠️ Ошибка ИИ. Попробуй позже.')
+	}
 })
 
-// ⬇️ ЭТО ДОБАВЬ ПОСЛЕ bot.on('text', ...)
+// --- КНОПКИ УВЕДОМЛЕНИЙ ---
 bot.action('spy_off', async ctx => {
-  adminSpyMode = false
-  await ctx.answerCbQuery('🔕 Уведомления отключены!')
-  await ctx.editMessageReplyMarkup(
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔔 Включить уведомления', 'spy_on')]
-    ]).reply_markup
-  ).catch(() => {})
+	adminSpyMode = false
+	await ctx.answerCbQuery('🔕 Уведомления отключены!')
+	await ctx.editMessageReplyMarkup(
+		Markup.inlineKeyboard([
+			[Markup.button.callback('🔔 Включить уведомления', 'spy_on')],
+		]).reply_markup,
+	).catch(() => {})
 })
 
 bot.action('spy_on', async ctx => {
-  adminSpyMode = true
-  await ctx.answerCbQuery('🔔 Уведомления включены!')
-  await ctx.editMessageReplyMarkup(
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔕 Отключить уведомления', 'spy_off')]
-    ]).reply_markup
-  ).catch(() => {})
+	adminSpyMode = true
+	await ctx.answerCbQuery('🔔 Уведомления включены!')
+	await ctx.editMessageReplyMarkup(
+		Markup.inlineKeyboard([
+			[Markup.button.callback('🔕 Отключить уведомления', 'spy_off')],
+		]).reply_markup,
+	).catch(() => {})
 })
 
-// Обработчик нажатия на кнопку "👤 Профиль" в меню
+// --- ПРОФИЛЬ ---
 bot.action('action_profile', async ctx => {
 	await ctx.answerCbQuery().catch(() => {})
-
 	const { getUser } = require('./services/userService')
 	const user = await getUser(ctx.from.id)
-
 	if (!user) {
 		return ctx.reply('Сначала нажми /start!')
 	}
-
 	const statusDisplay =
 		user.status === 'free'
 			? '🆓 Free'
 			: `💎 Premium (${user.status.toUpperCase()})`
-
 	const profileText = `
 👤 <b>Твой профиль:</b>
 ───────────────────────
@@ -444,7 +451,6 @@ bot.action('action_profile', async ctx => {
 🔥 <b>Стрик:</b> ${user.streak} дней
 🧠 <b>Выучено слов:</b> ${user.words_learned}
 `
-
 	await ctx.editMessageText(profileText, {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([
@@ -473,15 +479,11 @@ bot.action('action_select_lang', async ctx => {
 
 bot.action(/set_lang_(en|de)/, async ctx => {
 	ctx.session = ctx.session || {}
-
 	const lang = ctx.match[1]
 	const { updateUserLanguage } = require('./services/userService')
-
 	await updateUserLanguage(ctx.from.id, lang)
 	ctx.session.lang = lang
-
 	await ctx.answerCbQuery('Язык обновлен!')
-
 	await ctx
 		.editMessageText(
 			`✅ <b>Язык успешно изменен на ${lang === 'de' ? 'Немецкий' : 'Английский'}!</b>`,
@@ -492,78 +494,22 @@ bot.action(/set_lang_(en|de)/, async ctx => {
 				]),
 			},
 		)
-		.catch(err => console.error('Ошибка при обнаружении сообщения:', err))
+		.catch(err => console.error('Ошибка:', err))
 })
 
+// --- BROADCAST ---
 bot.command('broadcast', async ctx => {
 	if (ctx.from.id !== 5037778442) return
-
-	// Отрезаем саму команду /broadcast из текста
-	const text = ctx.message.text.replace(/\/broadcast(@\w+)?/, '').trim()
-
-	if (!text) {
-		return ctx.reply(
-			'⚠️ Напиши текст после команды.\nПример:\n/broadcast <b>Привет всем!</b> Добавили новую тему уроков 🔥',
-		)
-	}
-
-	try {
-		const users = await getAllUsers()
-		console.log('Юзеры из БД (первый):', JSON.stringify(users[0])) // <- добавь эту строку
-		let success = 0
-		let failed = 0
-
-		const statusMsg = await ctx.reply(
-			`📢 Рассылка началась... 0/${users.length}`,
-		)
-
-		for (const user of users) {
-			// Проверяем, какое поле используется для Telegram ID (telegram_id или id)
-			const targetId = user.telegram_id || user.id
-
-			if (!targetId) continue
-
-			try {
-				await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
-				success++
-			} catch (err) {
-				failed++
-				console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
-			}
-
-			// Обновляем статус каждые 20 сообщений, чтобы не спамить в чат админа
-			if ((success + failed) % 20 === 0) {
-				await ctx.telegram
-					.editMessageText(
-						ctx.chat.id,
-						statusMsg.message_id,
-						undefined,
-						`📢 Рассылка в процессе... ${success + failed}/${users.length}`,
-					)
-					.catch(() => {})
-			}
-
-			// Пауза 50мс, чтобы не превысить лимиты Telegram (строго до 30 сообщений в секунду)
-			await new Promise(resolve => setTimeout(resolve, 50))
-		}
-
-		// Финальный результат
-		await ctx.telegram.editMessageText(
-			ctx.chat.id,
-			statusMsg.message_id,
-			undefined,
-			`✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
-			{ parse_mode: 'HTML' },
-		)
-	} catch (error) {
-		console.error('Ошибка рассылки:', error)
-		await ctx.reply(`❌ Ошибка при выполнении рассылки: ${error.message}`)
-	}
+	ctx.session.waitingForBroadcast = true
+	await ctx.reply(
+		'📢 <b>Напиши текст рассылки следующим сообщением.</b>\n\nМожешь использовать HTML теги:\n<b>жирный</b> — &lt;b&gt;текст&lt;/b&gt;\n<i>курсив</i> — &lt;i&gt;текст&lt;/i&gt;',
+		{ parse_mode: 'HTML' },
+	)
 })
 
+// --- ТАРИФЫ ---
 bot.action('action_pricing', async ctx => {
 	await ctx.answerCbQuery().catch(() => {})
-
 	const pricingText = `
 💎 <b>ТАРИФЫ АКАДЕМИИ</b>
 ───────────────────────
@@ -585,7 +531,6 @@ bot.action('action_pricing', async ctx => {
 ───────────────────────
 По вопросам оплаты: @scrayass
 `
-
 	await ctx.editMessageText(pricingText, {
 		parse_mode: 'HTML',
 		...Markup.inlineKeyboard([
@@ -595,24 +540,15 @@ bot.action('action_pricing', async ctx => {
 	})
 })
 
+// --- ДОКУМЕНТЫ ---
 bot.action('action_docs', async ctx => {
 	await ctx.editMessageText(
 		'📄 <b>Документы и поддержка</b>\n\nВыберите нужный пункт:',
 		{
 			parse_mode: 'HTML',
 			...Markup.inlineKeyboard([
-				[
-					Markup.button.url(
-						'📄 Политика конфиденциальности',
-						'https://telegra.ph/Politika-konfidencialnosti-06-23-56',
-					),
-				],
-				[
-					Markup.button.url(
-						'📜 Пользовательское соглашение',
-						'https://telegra.ph/Polzovatelskoe-soglasheni-06-23',
-					),
-				],
+				[Markup.button.url('📄 Политика конфиденциальности', 'https://telegra.ph/Politika-konfidencialnosti-06-23-56')],
+				[Markup.button.url('📜 Пользовательское соглашение', 'https://telegra.ph/Polzovatelskoe-soglasheni-06-23')],
 				[Markup.button.url('🛠 Поддержка', 'https://t.me/scrayass')],
 				[Markup.button.callback('⬅️ В меню', 'action_main_menu')],
 			]),
@@ -630,10 +566,7 @@ async function sendLongMessage(ctx, text, keyboard = null) {
 				chunk === chunks[chunks.length - 1] ? keyboard : undefined,
 			)
 		} catch (err) {
-			console.error(
-				'Ошибка parse_mode HTML, отправляю как plain text:',
-				err.message,
-			)
+			console.error('Ошибка parse_mode HTML, отправляю как plain text:', err.message)
 			await ctx.reply(
 				chunk.replace(/<[^>]+>/g, ''),
 				chunk === chunks[chunks.length - 1] ? keyboard : undefined,
@@ -647,7 +580,7 @@ app.use(express.json())
 app.get('/', (req, res) => res.send('🤖 Academy is running!'))
 
 async function startBot() {
-	await ensureSchema() // <-- добавляем сюда, до webhook/launch
+	await ensureSchema()
 
 	const RENDER_URL = process.env.RENDER_EXTERNAL_URL
 	if (RENDER_URL) {
