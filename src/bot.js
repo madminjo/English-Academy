@@ -312,18 +312,23 @@ if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
     let success = 0
     let failed = 0
 
+    console.log(`📢 Рассылка: найдено ${users.length} пользователей`)
+    console.log('Список ID:', users.map(u => u.telegram_id || u.id))
+
     const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
 
     for (const user of users) {
         const targetId = user.telegram_id || user.id
+        console.log(`Отправляю юзеру: ${targetId}`)
         if (!targetId) continue
 
         try {
             await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
             success++
+            console.log(`✅ Отправлено: ${targetId}`)
         } catch (err) {
             failed++
-            console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
+            console.error(`❌ Не удалось отправить юзеру ${targetId}:`, err.message)
         }
 
         if ((success + failed) % 20 === 0) {
@@ -343,7 +348,6 @@ if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
     )
     return
 }
-
 	if (!ctx.session?.waitingForHomework) return
 
 	// 1. Проверка лимита домашки
