@@ -304,45 +304,45 @@ bot.on('text', async ctx => {
 	}
 
 	// 📢 Если админ отправляет рассылку
-	if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
-		ctx.session.waitingForBroadcast = false
-		const text = ctx.message.text
+if (ctx.from.id === 5037778442 && ctx.session?.waitingForBroadcast) {
+    ctx.session.waitingForBroadcast = false
+    const text = ctx.message.text.replace(/\\n/g, '\n')
 
-		const users = await getAllUsers()
-		let success = 0
-		let failed = 0
+    const users = await getAllUsers()
+    let success = 0
+    let failed = 0
 
-		const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
+    const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
 
-		for (const user of users) {
-			const targetId = user.telegram_id || user.id
-			if (!targetId) continue
+    for (const user of users) {
+        const targetId = user.telegram_id || user.id
+        if (!targetId) continue
 
-			try {
-				await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
-				success++
-			} catch (err) {
-				failed++
-				console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
-			}
+        try {
+            await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
+            success++
+        } catch (err) {
+            failed++
+            console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
+        }
 
-			if ((success + failed) % 20 === 0) {
-				await ctx.telegram.editMessageText(
-					ctx.chat.id, statusMsg.message_id, undefined,
-					`📢 Рассылка в процессе... ${success + failed}/${users.length}`,
-				).catch(() => {})
-			}
+        if ((success + failed) % 20 === 0) {
+            await ctx.telegram.editMessageText(
+                ctx.chat.id, statusMsg.message_id, undefined,
+                `📢 Рассылка в процессе... ${success + failed}/${users.length}`,
+            ).catch(() => {})
+        }
 
-			await new Promise(resolve => setTimeout(resolve, 50))
-		}
+        await new Promise(resolve => setTimeout(resolve, 50))
+    }
 
-		await ctx.telegram.editMessageText(
-			ctx.chat.id, statusMsg.message_id, undefined,
-			`✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
-			{ parse_mode: 'HTML' },
-		)
-		return
-	}
+    await ctx.telegram.editMessageText(
+        ctx.chat.id, statusMsg.message_id, undefined,
+        `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
+        { parse_mode: 'HTML' },
+    )
+    return
+}
 
 	if (!ctx.session?.waitingForHomework) return
 
