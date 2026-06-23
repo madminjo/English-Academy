@@ -40,10 +40,10 @@ module.exports = bot => {
     const allowed = await canUseFeature(ctx.from.id, 'words')
     if (!allowed) {
       return ctx.reply(
-`⏳ <b>Лимит генерации слов исчерпан</b>\n\n` +
+`⏳ Лимит генерации слов исчерпан\n\n` +
 `Вы использовали свои 3 бесплатные генерации на сегодня. Лимит обновится автоматически через 24 часа.\n\n` +
 `Хотите генерировать тексты без ограничений?\n` +
-`🚀 <b>Для покупки подписки напишите:</b> @scrayss`,
+`🚀 Для покупки подписки напишите: @scrayss`,
       )
     }
     await incrementFeature(ctx.from.id, 'words')

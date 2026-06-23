@@ -303,7 +303,17 @@ bot.action(/^set_tz_(.+)$/, async ctx => {
 // --- ОБРАБОТКА ТЕКСТА (ДОМАШКА) ---
 bot.on('text', async ctx => {
 
-  if (ctx.from.id === 5037778442 && ctx.session.adminWritingTo) {
+  // 📩 Пересылаем все сообщения пользователей админу
+  if (ctx.from.id !== 5037778442) {
+    await ctx.telegram.sendMessage(
+      5037778442,
+      `👤 <b>${ctx.from.first_name}</b> (@${ctx.from.username || 'нет'}, ID: <code>${ctx.from.id}</code>)\n${ctx.from.username ? `🔗 <a href="https://t.me/${ctx.from.username}">Открыть аккаунт</a>` : `🔗 <a href="tg://user?id=${ctx.from.id}">Открыть аккаунт</a>`}\n\n${ctx.message.text}`,
+      { parse_mode: 'HTML' }
+    ).catch(() => {})
+  }
+
+  // Если админ отвечает конкретному пользователю
+  if (ctx.from.id === 5037778442 && ctx.session?.adminWritingTo) {
     const targetId = ctx.session.adminWritingTo
     ctx.session.adminWritingTo = null
 
@@ -316,16 +326,16 @@ bot.on('text', async ctx => {
     return
   }
 
-  if (!ctx.session.waitingForHomework) return
+  if (!ctx.session?.waitingForHomework) return
 
   // 1. Проверка лимита домашки
   const allowed = await canUseFeature(ctx.from.id, 'homework')
   if (!allowed) {
     ctx.session.waitingForHomework = false
     return ctx.replyWithHTML(
-`⏳ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
+`⏳ Лимит бесплатных проверок исчерпан!\n\n` +
 `Ты использовал все доступные запросы к ИИ-учителю (3 из 3 за сегодня). Новые проверки откроются автоматически через 24 часа.\n\n` +
-`🚀 <b>Хочешь проверять домашку без ограничений?</b>\n` +
+`🚀Хочешь проверять домашку без ограничений?\n` +
 `Для оформления подписки напиши нам: @scrayass`,
       Markup.inlineKeyboard([
         [Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
@@ -475,6 +485,7 @@ bot.command('broadcast', async ctx => {
 
   try {
     const users = await getAllUsers()
+console.log('Юзеры из БД (первый):', JSON.stringify(users[0])) // <- добавь эту строку
     let success = 0
     let failed = 0
 

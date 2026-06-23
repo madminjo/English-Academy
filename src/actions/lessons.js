@@ -6,7 +6,7 @@ const { sanitizeForTelegram } = require('../utils/textFormatter')
 
 module.exports = bot => {
 	function getLangSettings(ctx) {
-	const lang = ctx.session.lang || 'en'
+	const lang = ctx.session?.lang || 'en'
 
 	const data =
 		lang === 'de'
@@ -79,10 +79,10 @@ const config = {
 	const allowed = await canUseFeature(ctx.from.id, 'lesson')
 	if (!allowed) {
 		return ctx.reply(
-`⏳ <b>Лимит бесплатных уроков исчерпан</b>\n\n` +
+`⏳ Лимит бесплатных уроков исчерпан\n\n` +
 `Вы уже заглянули в 3 урока за сегодня. Доступ обновится автоматически через 24 часа.\n\n` +
 `Хотите продолжить обучение прямо сейчас?\n` +
-`🚀 <b>Для покупки подписки напишите:</b> @scrayss`,
+`🚀 Для покупки подписки напишите: @scrayss`,
 		)
 	}
 	await incrementFeature(ctx.from.id, 'lesson')
@@ -108,7 +108,7 @@ const config = {
 		// Отправляем промежуточный статус
 		await ctx
 			.editMessageText(
-				'⏳ <b>Майкл уже открывает свой конспект...</b>\n\nГотовим интерактивный разбор темы: <code>День ' +
+				'⏳ Майкл уже открывает свой конспект... \n\nГотовим интерактивный разбор темы: <code>День ' +
 					targetDay +
 					' — ' +
 					topicName +
