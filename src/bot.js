@@ -22,6 +22,7 @@ bot.use(session())
 const {
   ensureSchema,
   getAllUsers,
+  getUsersByStatus,
   revokeSubscription,
   canRequest,
   incrementRequests,
@@ -80,16 +81,23 @@ bot.action('tz_group_asia', async ctx => {
 
 bot.action('adm_back', async ctx => {
   const users = await getAllUsers()
-  const buttons = users.map(u => [
+  const userButtons = users.map(u => [
     Markup.button.callback(
       `${u.username || u.id} (${u.status || 'free'})`,
       `adm_manage_${u.id}`,
     ),
   ])
 
+  const filterButtons = [
+    [
+      Markup.button.callback('🆓 Без подписки', 'adm_filter_free'),
+      Markup.button.callback('💎 С подпиской', 'adm_filter_subscribed'),
+    ],
+  ]
+
   await ctx.editMessageText('👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>', {
     parse_mode: 'HTML',
-    ...Markup.inlineKeyboard(buttons),
+    ...Markup.inlineKeyboard([...filterButtons, ...userButtons]),
   })
 })
 
@@ -97,16 +105,23 @@ bot.command('admin', async ctx => {
   if (ctx.from.id !== 5037778442) return
 
   const users = await getAllUsers()
-  const buttons = users.map(u => [
+  const userButtons = users.map(u => [
     Markup.button.callback(
       `${u.username || u.id} (${u.status})`,
       `adm_manage_${u.id}`,
     ),
   ])
 
+  const filterButtons = [
+    [
+      Markup.button.callback('🆓 Без подписки', 'adm_filter_free'),
+      Markup.button.callback('💎 С подпиской', 'adm_filter_subscribed'),
+    ],
+  ]
+
   await ctx.reply('👑 <b>СПИСОК ПОЛЬЗОВАТЕЛЕЙ:</b>', {
     parse_mode: 'HTML',
-    ...Markup.inlineKeyboard(buttons),
+    ...Markup.inlineKeyboard([...filterButtons, ...userButtons]),
   })
 })
 
@@ -132,9 +147,26 @@ bot.action(/^adm_manage_(\d+)$/, async ctx => {
         ),
       ],
       [Markup.button.callback('❌ Отключить подписку', `adm_off_${userId}`)],
+      [Markup.button.callback('✉️ Написать пользователю', `adm_msg_${userId}`)],
       [Markup.button.callback('⬅️ Назад к списку', 'adm_back')],
     ]),
   })
+})
+
+bot.action(/^adm_msg_(\d+)$/, async ctx => {
+  const userId = ctx.match[1]
+  ctx.session.adminWritingTo = userId // запоминаем кому пишем
+
+  await ctx.answerCbQuery()
+  await ctx.editMessageText(
+    `✉️ <b>Напиши текст сообщения для пользователя ${userId}.</b>\n\nОн придёт ему от имени бота.`,
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('⬅️ Отмена', `adm_manage_${userId}`)],
+      ]),
+    },
+  )
 })
 
 bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async ctx => {
@@ -153,6 +185,38 @@ bot.action(/^adm_prolong_(\d+)_([a-z0-9]+)$/, async ctx => {
       ]),
     },
   )
+})
+bot.action(/^adm_filter_(free|subscribed)$/, async ctx => {
+  const filter = ctx.match[1]
+  const users = await getUsersByStatus(filter)
+
+  const title = filter === 'free'
+    ? '🆓 <b>ПОЛЬЗОВАТЕЛИ БЕЗ ПОДПИСКИ:</b>'
+    : '💎 <b>ПОЛЬЗОВАТЕЛИ С ПОДПИСКОЙ:</b>'
+
+  const userButtons = users.map(u => [
+    Markup.button.callback(
+      `${u.username || u.id} (${u.status})`,
+      `adm_manage_${u.id}`,
+    ),
+  ])
+
+  if (userButtons.length === 0) {
+    return ctx.editMessageText(`${title}\n\nПусто.`, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('⬅️ Назад', 'adm_back')],
+      ]),
+    })
+  }
+
+  await ctx.editMessageText(title, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      ...userButtons,
+      [Markup.button.callback('⬅️ Назад', 'adm_back')],
+    ]),
+  })
 })
 
 bot.action(/^adm_off_(\d+)$/, async ctx => {
@@ -238,12 +302,36 @@ bot.action(/^set_tz_(.+)$/, async ctx => {
 
 // --- ОБРАБОТКА ТЕКСТА (ДОМАШКА) ---
 bot.on('text', async ctx => {
-  if (!ctx.session.waitingForHomework) return
 
+    if (ctx.from.id === 5037778442 && ctx.session.adminWritingTo) {
+    const targetId = ctx.session.adminWritingTo
+    ctx.session.adminWritingTo = null
+
+    try {
+      await ctx.telegram.sendMessage(targetId, ctx.message.text, { parse_mode: 'HTML' })
+      await ctx.reply(`✅ Сообщение отправлено пользователю ${targetId}`)
+    } catch (err) {
+      await ctx.reply(`❌ Не удалось отправить: ${err.message}`)
+    }
+    return
+  }
+
+    if (!ctx.session.waitingForHomework) return
+
+  // 1. Проверка лимитов запросов
   // 1. Проверка лимитов запросов
   const allowed = await canRequest(ctx.from.id)
   if (!allowed) {
-    return ctx.reply('⚠️ <b>Лимит исчерпан!</b> На сегодня бесплатные запросы закончились, bro.', { parse_mode: 'HTML' })
+    ctx.session.waitingForHomework = false
+    return ctx.replyWithHTML(
+      `⚠️ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
+      `Ты использовал все бесплатные запросы к ИИ-учителю на сегодня (3 шт).\n\n` +
+      `Оформи подписку, чтобы проверять домашку без ограничений 🚀`,
+      Markup.inlineKeyboard([
+        [Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
+        [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
+      ]),
+    )
   }
 
   // 2. ОПРЕДЕЛЕНИЕ ЯЗЫКА
@@ -325,9 +413,10 @@ bot.action('action_profile', async ctx => {
 🧠 <b>Выучено слов:</b> ${user.words_learned}
 `
 
-  await ctx.editMessageText(profileText, {
+await ctx.editMessageText(profileText, {
     parse_mode: 'HTML',
     ...Markup.inlineKeyboard([
+      [Markup.button.callback('💎 Тарифы', 'action_pricing')],
       [Markup.button.callback('🌍 Изменить язык', 'action_select_lang')],
       [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
     ]),
@@ -372,6 +461,77 @@ bot.action(/set_lang_(en|de)/, async ctx => {
       },
     )
     .catch(err => console.error('Ошибка при обнаружении сообщения:', err))
+})
+
+bot.command('broadcast', async ctx => {
+  if (ctx.from.id !== 5037778442) return
+
+  const text = ctx.message.text.replace('/broadcast', '').trim()
+
+  if (!text) {
+    return ctx.reply('⚠️ Напиши текст после команды.\nПример:\n/broadcast Привет всем! Добавили новую тему уроков 🔥')
+  }
+
+  const users = await getAllUsers()
+  let success = 0
+  let failed = 0
+
+  const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
+
+  for (const user of users) {
+    try {
+      await ctx.telegram.sendMessage(user.id, text, { parse_mode: 'HTML' })
+      success++
+    } catch (err) {
+      failed++
+      console.error(`Не удалось отправить юзеру ${user.id}:`, err.message)
+    }
+
+    // небольшая пауза, чтобы не упереться в лимиты Telegram (30 msg/sec)
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+
+  await ctx.telegram.editMessageText(
+    ctx.chat.id,
+    statusMsg.message_id,
+    undefined,
+    `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (юзер заблокировал бота или удалил чат)`,
+    { parse_mode: 'HTML' },
+  )
+})
+
+bot.action('action_pricing', async ctx => {
+  await ctx.answerCbQuery().catch(() => {})
+
+  const pricingText = `
+💎 <b>ТАРИФЫ АКАДЕМИИ</b>
+───────────────────────
+🆓 <b>Free</b> — 3 запроса к ИИ-учителю в день
+───────────────────────
+📅 <b>1 месяц</b>
+🇰🇬 399 сом / 🇷🇺 359 ₽ / 🇺🇸 $4.7
+
+📅 <b>3 месяца</b> <i>(экономия ~17%)</i>
+🇰🇬 999 сом / 🇷🇺 899 ₽ / 🇺🇸 $11.7
+
+📅 <b>6 месяцев</b> <i>(экономия ~25%)</i>
+🇰🇬 1799 сом / 🇷🇺 1619 ₽ / 🇺🇸 $21
+
+📅 <b>12 месяцев</b> <i>(экономия ~37%)</i>
+🇰🇬 2999 сом / 🇷🇺 2699 ₽ / 🇺🇸 $35
+
+✅ Без лимитов на проверку домашки и уроки
+───────────────────────
+По вопросам оплаты: @scrayass
+`
+
+  await ctx.editMessageText(pricingText, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([
+      [Markup.button.url('💳 Купить подписку', 'https://t.me/scrayass')],
+      [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
+    ]),
+  })
 })
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---

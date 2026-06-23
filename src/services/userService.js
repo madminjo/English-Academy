@@ -52,6 +52,20 @@ async function getAllUsers() {
 	return result.rows
 }
 
+// Получение пользователей с фильтром по статусу подписки
+async function getUsersByStatus(filter) {
+	let query
+	if (filter === 'free') {
+		query = `SELECT telegram_id as id, username, status FROM users WHERE telegram_id IS NOT NULL AND status = 'free'`
+	} else if (filter === 'subscribed') {
+		query = `SELECT telegram_id as id, username, status FROM users WHERE telegram_id IS NOT NULL AND status != 'free'`
+	} else {
+		query = `SELECT telegram_id as id, username, status FROM users WHERE telegram_id IS NOT NULL`
+	}
+	const result = await db.query(query)
+	return result.rows
+}
+
 // 4. Обновление дня обучения
 async function updateUserDay(id, newDay) {
 	await db.query('UPDATE users SET current_day = $1 WHERE telegram_id = $2', [
@@ -134,13 +148,13 @@ function isPrivileged(id, user) {
 }
 
 // ===================== ЛИМИТ ЗАПРОСОВ К ИИ =====================
-// Триал (дни 0-5): 10 запросов/день. После: 5 запросов/день.
+
 async function canRequest(id) {
 	const user = await getUser(id)
 	if (!user) return false
 	if (isPrivileged(id, user)) return true
 
-	const dailyLimit = daysSinceRegistration(user) <= 5 ? 10 : 5
+	const dailyLimit = 3
 
 	const today = new Date().toISOString().split('T')[0]
 	const lastRequestDate = user.last_request_date
@@ -198,7 +212,6 @@ async function checkLessonAccess(id, dayNumber) {
 		? new Date(user.last_lesson_date).toISOString().split('T')[0]
 		: null
 
-	// Уже открывал именно ЭТОТ урок сегодня — пускаем бесплатно, без траты лимита
 	if (lastLessonDate === today && user.last_opened_lesson_day === dayNumber) {
 		return { allowed: true, alreadyOpenedToday: true }
 	}
@@ -206,13 +219,11 @@ async function checkLessonAccess(id, dayNumber) {
 	const dailyLimit = daysSinceRegistration(user) <= 5 ? 5 : 2
 
 	if (lastLessonDate !== today) {
-		// Новый день — счётчик ещё не считается
 		return { allowed: true, alreadyOpenedToday: false }
 	}
 
 	return { allowed: user.daily_lessons < dailyLimit, alreadyOpenedToday: false }
 }
-
 // Старая версия increment (оставлена для обратной совместимости)
 async function incrementLessonsLegacy(id) {
 	const today = new Date().toISOString().split('T')[0]
@@ -279,6 +290,7 @@ module.exports = {
 	getUser,
 	getUserById: getUser,
 	getAllUsers,
+	getUsersByStatus,
 	updateUserDay,
 	updateWordsCount,
 	setSubscription,

@@ -39,7 +39,9 @@ module.exports = bot => {
 					[
 						Markup.button.callback('👤 Профиль', 'action_profile'),
 						Markup.button.callback('🎯 Уровни', 'action_lessons'),
+						
 					],
+					[Markup.button.callback('💎 Тарифы', 'action_pricing')],
 					[Markup.button.callback('⚙️ Настройки времени', 'action_settings')],
 				]).reply_markup,
 			})
