@@ -80,7 +80,8 @@ async function generateContentWithRetry(
 					'Content-Type': 'application/json',
 				},
 				body: JSON.stringify({
-					model: 'openai/gpt-oss-20b', // Твоя рабочая модель
+					// model: 'openai/gpt-oss-20b',
+					model: 'llama-3.3-70b-versatile',
 					input: fullInput,
 					max_output_tokens: options.maxOutputTokens || 900,
 				}),
@@ -99,19 +100,35 @@ async function generateContentWithRetry(
 			}
 
 			const data = await response.json()
-			// console.log('🔍 [Groq RAW]:', JSON.stringify(data).slice(0, 500))
+			console.log('🔍 [Groq RAW]:', JSON.stringify(data).slice(0, 500))
+
+						let aiText = ''
+
 			// Парсим JSON строго по структуре эндпоинта /responses
 			const messageOutput = data.output?.find(item => item.type === 'message')
-			let aiText =
-				messageOutput?.content?.[0]?.type === 'output_text'
-					? messageOutput.content[0].text
-					: messageOutput?.content?.[0]?.text || ''
+if (messageOutput?.content?.[0]?.text) {
+    aiText = messageOutput.content[0].text
+}
 
-			if (!aiText) {
-				throw new Error(
-					'Не удалось извлечь текст ответа из JSON структуры Groq',
-				)
-			}
+// Стандартная структура /chat/completions (запасной вариант)
+if (!aiText && data.choices?.[0]?.message?.content) {
+    aiText = data.choices[0].message.content
+}
+
+// Ещё один вариант /responses
+if (!aiText && data.output?.[0]?.content?.[0]?.text) {
+    aiText = data.output[0].content[0].text
+}
+
+// Простейший вариант
+if (!aiText && typeof data.output === 'string') {
+    aiText = data.output
+}
+
+if (!aiText) {
+    console.error('❌ [Groq] Неизвестная структура ответа:', JSON.stringify(data))
+    throw new Error('Не удалось извлечь текст ответа из JSON структуры Groq')
+}
 
 			// 👇 Жёсткое ограничение длины ответа — 3500 символов
 			const MAX_CHARS = 3500
