@@ -542,13 +542,13 @@ bot.action('action_docs', async ctx => {
         [
           Markup.button.url(
             '📄 Политика конфиденциальности',
-            'https://telegra.ph/Politika-konfidencialnosti-06-21-31'
+            'https://telegra.ph/Politika-konfidencialnosti-06-23-56'
           ),
         ],
         [
           Markup.button.url(
             '📜 Пользовательское соглашение',
-            'https://telegra.ph/Polzovatelskoe-soglashenie-04-01-19'
+            'https://telegra.ph/Polzovatelskoe-soglasheni-06-23'
           ),
         ],
         [
