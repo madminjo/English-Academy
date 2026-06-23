@@ -100,7 +100,7 @@ async function generateContentWithRetry(
 			}
 
 			const data = await response.json()
-			console.log('🔍 [Groq RAW]:', JSON.stringify(data).slice(0, 500))
+			// console.log('🔍 [Groq RAW]:', JSON.stringify(data).slice(0, 500))
 
 						let aiText = ''
 
