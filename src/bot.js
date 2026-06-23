@@ -323,9 +323,10 @@ bot.on('text', async ctx => {
   if (!allowed) {
     ctx.session.waitingForHomework = false
     return ctx.replyWithHTML(
-      `⚠️ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
-      `Ты использовал все бесплатные запросы к ИИ-учителю (3 шт). Лимит обновится через 24 часа.\n\n` +
-      `Оформи подписку, чтобы проверять домашку без ограничений 🚀`,
+`⏳ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
+`Ты использовал все доступные запросы к ИИ-учителю (3 из 3 за сегодня). Новые проверки откроются автоматически через 24 часа.\n\n` +
+`🚀 <b>Хочешь проверять домашку без ограничений?</b>\n` +
+`Для оформления подписки напиши нам: @scrayass`,
       Markup.inlineKeyboard([
         [Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
         [Markup.button.callback('⬅️ В меню', 'action_main_menu')],
@@ -465,38 +466,61 @@ bot.action(/set_lang_(en|de)/, async ctx => {
 bot.command('broadcast', async ctx => {
   if (ctx.from.id !== 5037778442) return
 
+  // Отрезаем саму команду /broadcast из текста
   const text = ctx.message.text.replace('/broadcast', '').trim()
 
   if (!text) {
-    return ctx.reply('⚠️ Напиши текст после команды.\nПример:\n/broadcast Привет всем! Добавили новую тему уроков 🔥')
+    return ctx.reply('⚠️ Напиши текст после команды.\nПример:\n/broadcast <b>Привет всем!</b> Добавили новую тему уроков 🔥')
   }
 
-  const users = await getAllUsers()
-  let success = 0
-  let failed = 0
+  try {
+    const users = await getAllUsers()
+    let success = 0
+    let failed = 0
 
-  const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
+    const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
 
-  for (const user of users) {
-    try {
-      await ctx.telegram.sendMessage(user.id, text, { parse_mode: 'HTML' })
-      success++
-    } catch (err) {
-      failed++
-      console.error(`Не удалось отправить юзеру ${user.id}:`, err.message)
+    for (const user of users) {
+      // Проверяем, какое поле используется для Telegram ID (telegram_id или id)
+      const targetId = user.telegram_id || user.id
+
+      if (!targetId) continue
+
+      try {
+        await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
+        success++
+      } catch (err) {
+        failed++
+        console.error(`Не удалось отправить юзеру ${targetId}:`, err.message)
+      }
+
+      // Обновляем статус каждые 20 сообщений, чтобы не спамить в чат админа
+      if ((success + failed) % 20 === 0) {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          statusMsg.message_id,
+          undefined,
+          `📢 Рассылка в процессе... ${success + failed}/${users.length}`,
+        ).catch(() => {})
+      }
+
+      // Пауза 50мс, чтобы не превысить лимиты Telegram (строго до 30 сообщений в секунду)
+      await new Promise(resolve => setTimeout(resolve, 50))
     }
 
-    // небольшая пауза, чтобы не упереться в лимиты Telegram (30 msg/sec)
-    await new Promise(resolve => setTimeout(resolve, 50))
-  }
+    // Финальный результат
+    await ctx.telegram.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      undefined,
+      `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (блокировка бота/удаленный чат)`,
+      { parse_mode: 'HTML' },
+    )
 
-  await ctx.telegram.editMessageText(
-    ctx.chat.id,
-    statusMsg.message_id,
-    undefined,
-    `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed} (юзер заблокировал бота или удалил чат)`,
-    { parse_mode: 'HTML' },
-  )
+  } catch (error) {
+    console.error('Ошибка рассылки:', error)
+    await ctx.reply(`❌ Ошибка при выполнении рассылки: ${error.message}`)
+  }
 })
 
 bot.action('action_pricing', async ctx => {
