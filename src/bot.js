@@ -503,12 +503,40 @@ bot.action(/set_lang_(en|de)/, async ctx => {
 
 // --- BROADCAST ---
 bot.command('broadcast', async ctx => {
-	if (ctx.from.id !== 5037778442) return
-	ctx.session.waitingForBroadcast = true
-	await ctx.reply(
-		'📢 <b>Напиши текст рассылки следующим сообщением.</b>\n\nМожешь использовать HTML теги:\n<b>жирный</b> — &lt;b&gt;текст&lt;/b&gt;\n<i>курсив</i> — &lt;i&gt;текст&lt;/i&gt;',
-		{ parse_mode: 'HTML' },
-	)
+    if (ctx.from.id !== 5037778442) return
+    
+    // Текст после команды: /broadcast Привет всем!
+    const text = ctx.message.text.replace('/broadcast', '').trim()
+    
+    if (!text) {
+        return ctx.reply('❌ Напиши текст сразу после команды:\n/broadcast Привет всем!')
+    }
+    
+    const users = await getAllUsers()
+    let success = 0
+    let failed = 0
+    
+    const statusMsg = await ctx.reply(`📢 Рассылка началась... 0/${users.length}`)
+    
+    for (const user of users) {
+        const targetId = user.telegram_id || user.id
+        if (!targetId) continue
+        
+        try {
+            await ctx.telegram.sendMessage(targetId, text, { parse_mode: 'HTML' })
+            success++
+        } catch (err) {
+            failed++
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    
+    await ctx.telegram.editMessageText(
+        ctx.chat.id, statusMsg.message_id, undefined,
+        `✅ <b>Рассылка завершена!</b>\n\n📤 Успешно: ${success}\n❌ Не доставлено: ${failed}`,
+        { parse_mode: 'HTML' },
+    )
 })
 
 // --- ТАРИФЫ ---
