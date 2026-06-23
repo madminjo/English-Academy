@@ -24,8 +24,8 @@ const {
   getAllUsers,
   getUsersByStatus,
   revokeSubscription,
-  canRequest,
-  incrementRequests,
+  canUseFeature,
+  incrementFeature,
   getUser,
   setSubscription,
 } = require('./services/userService')
@@ -303,7 +303,7 @@ bot.action(/^set_tz_(.+)$/, async ctx => {
 // --- ОБРАБОТКА ТЕКСТА (ДОМАШКА) ---
 bot.on('text', async ctx => {
 
-    if (ctx.from.id === 5037778442 && ctx.session.adminWritingTo) {
+  if (ctx.from.id === 5037778442 && ctx.session.adminWritingTo) {
     const targetId = ctx.session.adminWritingTo
     ctx.session.adminWritingTo = null
 
@@ -316,16 +316,15 @@ bot.on('text', async ctx => {
     return
   }
 
-    if (!ctx.session.waitingForHomework) return
+  if (!ctx.session.waitingForHomework) return
 
-  // 1. Проверка лимитов запросов
-  // 1. Проверка лимитов запросов
-  const allowed = await canRequest(ctx.from.id)
+  // 1. Проверка лимита домашки
+  const allowed = await canUseFeature(ctx.from.id, 'homework')
   if (!allowed) {
     ctx.session.waitingForHomework = false
     return ctx.replyWithHTML(
       `⚠️ <b>Лимит бесплатных проверок исчерпан!</b>\n\n` +
-      `Ты использовал все бесплатные запросы к ИИ-учителю на сегодня (3 шт).\n\n` +
+      `Ты использовал все бесплатные запросы к ИИ-учителю (3 шт). Лимит обновится через 24 часа.\n\n` +
       `Оформи подписку, чтобы проверять домашку без ограничений 🚀`,
       Markup.inlineKeyboard([
         [Markup.button.url('💎 Купить подписку', 'https://t.me/scrayass')],
@@ -346,8 +345,8 @@ bot.on('text', async ctx => {
 
   const waitingMsg = await ctx.reply('🔄 ИИ-Учитель проверяет твою работу...')
 
-  // Уменьшаем баланс запросов (вызываем один раз, дубликат удален)
-  const remaining = await incrementRequests(ctx.from.id)
+  // Списываем запрос (один раз, дубликата нет)
+  const remaining = await incrementFeature(ctx.from.id, 'homework')
   console.log(
     `Пользователь ${ctx.from.id} потратил запрос. Осталось/Всего: ${remaining}`,
   )
@@ -368,17 +367,17 @@ bot.on('text', async ctx => {
     await ctx.telegram
       .deleteMessage(ctx.chat.id, waitingMsg.message_id)
       .catch(() => {})
-      
-await sendLongMessage(
-  ctx,
-  sanitizeForTelegram(response.text),
-  Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📖 Урок дня', 'action_today'),
-      Markup.button.callback('⬅️ В меню', 'action_main_menu'),
-    ],
-  ]),
-)
+
+    await sendLongMessage(
+      ctx,
+      sanitizeForTelegram(response.text),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📖 Урок дня', 'action_today'),
+          Markup.button.callback('⬅️ В меню', 'action_main_menu'),
+        ],
+      ]),
+    )
   } catch (error) {
     console.error(error)
     await ctx.reply('⚠️ Ошибка ИИ. Попробуй позже.')

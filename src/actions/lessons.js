@@ -1,8 +1,7 @@
 const { Markup } = require('telegraf')
-
-const { getUserById, updateUserDay } = require('../services/userService')
 // Импортируем наш метод пула аккаунтов вместо прямого подключения GoogleGenAI
 const { generateContentWithRetry } = require('../services/aiService')
+const { getUserById, updateUserDay, canUseFeature, incrementFeature } = require('../services/userService')
 const { sanitizeForTelegram } = require('../utils/textFormatter')
 
 module.exports = bot => {
@@ -73,15 +72,25 @@ const config = {
 
 	// 2. ОБРАБОТЧИК: КЛИК ПО КОНКРЕТНОМУ УРОКУ + ГЕНЕРАЦИЯ ОБЪЯСНЕНИЯ ОТ ИИ
 	bot.action(/^select_day_(\d+)$/, async ctx => {
-		await ctx.answerCbQuery().catch(() => {})
-		const targetDay = parseInt(ctx.match[1], 10)
-		const { topics, getTopicById, settings, lang } = getLangSettings(ctx)
 
-		// Безопасный поиск названия темы по ID из структуры уровней
-		let topicName = 'Выбранный урок'
-if (typeof getTopicById === 'function') {
-	topicName = getTopicById(targetDay)
-} else {
+		await ctx.answerCbQuery().catch(() => {})
+	const targetDay = parseInt(ctx.match[1], 10)
+
+	const allowed = await canUseFeature(ctx.from.id, 'lesson')
+	if (!allowed) {
+		return ctx.reply(
+			'⚠️ Лимит бесплатных уроков исчерпан (3 в сутки). Лимит обновится через 24 часа, либо оформи подписку 🚀',
+		)
+	}
+	await incrementFeature(ctx.from.id, 'lesson')
+
+	const { topics, getTopicById, settings, lang } = getLangSettings(ctx)
+
+	// Безопасный поиск названия темы по ID из структуры уровней
+	let topicName = 'Выбранный урок'
+	if (typeof getTopicById === 'function') {
+		topicName = getTopicById(targetDay)
+	} else {
 			for (const level in topics) {
 				if (Array.isArray(topics[level])) {
 					const found = topics[level].find(t => t && t.id === targetDay)

@@ -10,6 +10,10 @@ async function ensureSchema() {
 		{ name: 'daily_lessons', ddl: 'INTEGER DEFAULT 0' },
 		{ name: 'last_lesson_date', ddl: 'DATE' },
 		{ name: 'last_opened_lesson_day', ddl: 'INTEGER' }, // какой урок (day_number) открывали последним
+		{ name: 'requests_reset_at', ddl: 'TIMESTAMP' },
+		{ name: 'lessons_reset_at', ddl: 'TIMESTAMP' },
+		{ name: 'daily_words', ddl: 'INTEGER DEFAULT 0' },
+		{ name: 'words_reset_at', ddl: 'TIMESTAMP' },
 	]
 
 	for (const col of columns) {
@@ -18,7 +22,10 @@ async function ensureSchema() {
 				`ALTER TABLE users ADD COLUMN IF NOT EXISTS ${col.name} ${col.ddl}`,
 			)
 		} catch (error) {
-			console.error(`⚠️ Не удалось проверить/создать колонку ${col.name}:`, error.message)
+			console.error(
+				`⚠️ Не удалось проверить/создать колонку ${col.name}:`,
+				error.message,
+			)
 		}
 	}
 	console.log('✅ Схема users проверена (лимиты ИИ и уроков)')
@@ -205,7 +212,8 @@ async function canOpenLesson(id) {
 async function checkLessonAccess(id, dayNumber) {
 	const user = await getUser(id)
 	if (!user) return { allowed: false, alreadyOpenedToday: false }
-	if (isPrivileged(id, user)) return { allowed: true, alreadyOpenedToday: false }
+	if (isPrivileged(id, user))
+		return { allowed: true, alreadyOpenedToday: false }
 
 	const today = new Date().toISOString().split('T')[0]
 	const lastLessonDate = user.last_lesson_date
@@ -284,6 +292,53 @@ async function getUserLanguage(id) {
 	return user ? user.lang : 'en'
 }
 
+const FEATURE_LIMITS = { homework: 3, lesson: 3, words: 3 }
+const FEATURE_COLUMNS = {
+	homework: { count: 'daily_requests', reset: 'requests_reset_at' },
+	lesson:   { count: 'daily_lessons',  reset: 'lessons_reset_at' },
+	words:    { count: 'daily_words',    reset: 'words_reset_at' },
+}
+
+// Универсальная проверка лимита по фиче (homework / lesson / words)
+async function canUseFeature(id, feature) {
+	const user = await getUser(id)
+	if (!user) return false
+	if (isPrivileged(id, user)) return true
+
+	const { count, reset } = FEATURE_COLUMNS[feature]
+	const limit = FEATURE_LIMITS[feature]
+
+	const resetAt = user[reset] ? new Date(user[reset]).getTime() : 0
+	if (Date.now() > resetAt) return true // окно истекло (или его не было) — разрешаем
+
+	return user[count] < limit
+}
+
+// Универсальный инкремент по фиче, со сбросом окна на 24ч от первого запроса
+async function incrementFeature(id, feature) {
+	const { count, reset } = FEATURE_COLUMNS[feature]
+	const user = await getUser(id)
+	if (!user) return null
+
+	const now = Date.now()
+	const resetAt = user[reset] ? new Date(user[reset]).getTime() : 0
+
+	if (now > resetAt) {
+		// Новое 24-часовое окно
+		const newReset = new Date(now + 24 * 60 * 60 * 1000)
+		const result = await db.query(
+			`UPDATE users SET ${count} = 1, ${reset} = $1 WHERE telegram_id = $2 RETURNING ${count}`,
+			[newReset, id],
+		)
+		return result.rows[0] ? result.rows[0][count] : null
+	}
+
+	const result = await db.query(
+		`UPDATE users SET ${count} = ${count} + 1 WHERE telegram_id = $1 RETURNING ${count}`,
+		[id],
+	)
+	return result.rows[0] ? result.rows[0][count] : null
+}
 module.exports = {
 	ensureSchema,
 	createUser,
@@ -304,4 +359,6 @@ module.exports = {
 	incrementLessons, // теперь принимает (id, dayNumber)
 	updateUserLanguage,
 	getUserLanguage,
+	canUseFeature,
+incrementFeature,
 }

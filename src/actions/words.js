@@ -1,8 +1,9 @@
 const { Markup } = require('telegraf')
-const { getUserById, updateWordsCount } = require('../services/userService')
+const { getUserById, updateWordsCount, canUseFeature, incrementFeature } = require('../services/userService')
 const wordService = require('../services/wordService')
 const { generateContentWithRetry } = require('../services/aiService')
 const { sanitizeForTelegram } = require('../utils/textFormatter')
+
 
 // Динамически определяем, какие темы грузить, чтобы узнать название урока по ID
 const getTopicsByLang = lang =>
@@ -35,6 +36,14 @@ module.exports = bot => {
   bot.action(/^action_words(:force)?$/, async ctx => {
     const isForceUpdate = ctx.match[1] === ':force'
     await ctx.answerCbQuery().catch(() => {})
+
+    const allowed = await canUseFeature(ctx.from.id, 'words')
+    if (!allowed) {
+      return ctx.reply(
+        '⚠️ Лимит генерации слов исчерпан (3 в сутки). Лимит обновится через 24 часа, либо оформи подписку 🚀',
+      )
+    }
+    await incrementFeature(ctx.from.id, 'words')
 
     if (!ctx.session) ctx.session = {}
     const lang = ctx.session.lang || 'en'
@@ -127,6 +136,7 @@ module.exports = bot => {
       await ctx.reply('⚠️ Не удалось собрать пак. Бро, попробуй еще раз!')
     }
   })
+  
 
   bot.action('action_save_words', async ctx => {
     const wordsToSave = ctx.session.generatedWords
